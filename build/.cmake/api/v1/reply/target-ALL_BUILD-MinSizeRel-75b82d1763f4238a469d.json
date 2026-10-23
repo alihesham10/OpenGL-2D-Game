@@ -1,0 +1,57 @@
+{
+	"backtrace" : 0,
+	"backtraceGraph" : 
+	{
+		"commands" : [],
+		"files" : 
+		[
+			"external/glfw-3.5.1/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			}
+		]
+	},
+	"codemodelVersion" : 
+	{
+		"major" : 2,
+		"minor" : 11
+	},
+	"dependencies" : 
+	[
+		{
+			"id" : "glfw::@9ff3893ebad6e09e5c10"
+		},
+		{
+			"id" : "ZERO_CHECK::@6890427a1f51a3e7e1df"
+		},
+		{
+			"id" : "docs::@ee09ed7baf9ef1cfc233"
+		}
+	],
+	"folder" : 
+	{
+		"name" : "CMakePredefinedTargets"
+	},
+	"id" : "ALL_BUILD::@d54954df02fd115c80a2",
+	"isGeneratorProvided" : true,
+	"name" : "ALL_BUILD",
+	"orderDependencies" : 
+	[
+		{
+			"id" : "glfw::@9ff3893ebad6e09e5c10"
+		},
+		{
+			"id" : "docs::@ee09ed7baf9ef1cfc233"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "external/glfw-3.5.1",
+		"source" : "external/glfw-3.5.1"
+	},
+	"sources" : [],
+	"type" : "UTILITY"
+}

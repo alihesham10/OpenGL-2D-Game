@@ -1,0 +1,16 @@
+C:/Users/hp/Desktop/Graphics_Project_Team_Rakam1/build/CMakeFiles/OpenGLStarter.dir
+C:/Users/hp/Desktop/Graphics_Project_Team_Rakam1/build/CMakeFiles/INSTALL.dir
+C:/Users/hp/Desktop/Graphics_Project_Team_Rakam1/build/CMakeFiles/ALL_BUILD.dir
+C:/Users/hp/Desktop/Graphics_Project_Team_Rakam1/build/CMakeFiles/ZERO_CHECK.dir
+C:/Users/hp/Desktop/Graphics_Project_Team_Rakam1/build/external/glfw-3.5.1/CMakeFiles/uninstall.dir
+C:/Users/hp/Desktop/Graphics_Project_Team_Rakam1/build/external/glfw-3.5.1/CMakeFiles/INSTALL.dir
+C:/Users/hp/Desktop/Graphics_Project_Team_Rakam1/build/external/glfw-3.5.1/CMakeFiles/ALL_BUILD.dir
+C:/Users/hp/Desktop/Graphics_Project_Team_Rakam1/build/external/glfw-3.5.1/src/CMakeFiles/glfw.dir
+C:/Users/hp/Desktop/Graphics_Project_Team_Rakam1/build/external/glfw-3.5.1/src/CMakeFiles/update_mappings.dir
+C:/Users/hp/Desktop/Graphics_Project_Team_Rakam1/build/external/glfw-3.5.1/src/CMakeFiles/INSTALL.dir
+C:/Users/hp/Desktop/Graphics_Project_Team_Rakam1/build/external/glfw-3.5.1/docs/CMakeFiles/docs.dir
+C:/Users/hp/Desktop/Graphics_Project_Team_Rakam1/build/external/glfw-3.5.1/docs/CMakeFiles/INSTALL.dir
+C:/Users/hp/Desktop/Graphics_Project_Team_Rakam1/build/external/glm/CMakeFiles/INSTALL.dir
+C:/Users/hp/Desktop/Graphics_Project_Team_Rakam1/build/external/glm/CMakeFiles/ALL_BUILD.dir
+C:/Users/hp/Desktop/Graphics_Project_Team_Rakam1/build/external/glm/glm/CMakeFiles/glm.dir
+C:/Users/hp/Desktop/Graphics_Project_Team_Rakam1/build/external/glm/glm/CMakeFiles/INSTALL.dir
