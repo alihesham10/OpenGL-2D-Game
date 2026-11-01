@@ -6,6 +6,7 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include "Enemy.h"
+#include "WaveManager.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -148,7 +149,7 @@ std::vector<Enemy> enemies;
 std::vector<EnemyProjectile> enemyProjectiles;
 std::vector<PlayerProjectile> playerProjectiles;
 std::vector<Collectible> collectibles;
-float enemySpawnTimer = 0.0f;
+WaveManager waveManager(GameplayTuning::ENEMY_SPAWN_INTERVAL);
 constexpr int STARTING_COINS = 30;
 constexpr int ENEMY_COIN_REWARD = 10;
 constexpr int MELEE_PLAYER_COST = 10;
@@ -163,6 +164,7 @@ int placementLane = -1;
 int hoveredPlayerCard = -1;
 bool paused = false;
 bool gameOver = false;
+bool gameWon = false;
 float lastFrameTime = 0.0f;
 
 GLuint compileShader(GLenum type, const char* source) {
@@ -338,10 +340,18 @@ void purchaseAndPlacePlayer(int card, int lane) {
     coins -= cost;
 }
 
-void spawnEnemy() {
+void spawnEnemy(EnemyType type) {
     int lane = std::rand() % LANE_COUNT;
-    enemies.push_back({EnemyType::EasyUpperRanged, glm::vec2(0.90f, LANE_Y[lane]),
-                       lane, GameplayTuning::EASY_ENEMY_SPEED_PIXELS_PER_SECOND, 5, true, false, 0.0f});
+    float speed = GameplayTuning::EASY_ENEMY_SPEED_PIXELS_PER_SECOND;
+    int health = 5;
+    if (type == EnemyType::MediumLowerRanged) {
+        speed = GameplayTuning::MEDIUM_ENEMY_SPEED_PIXELS_PER_SECOND;
+    } else if (type == EnemyType::HardMelee) {
+        speed = GameplayTuning::HARD_ENEMY_SPEED_PIXELS_PER_SECOND;
+        health = 7;
+    }
+    enemies.push_back({type, glm::vec2(0.90f, LANE_Y[lane]), lane,
+                       speed, health, true, false, 0.0f});
 }
 
 void defeatEnemy(Enemy& enemy) {
@@ -356,8 +366,7 @@ void resetEnemies() {
     enemyProjectiles.clear();
     playerProjectiles.clear();
     collectibles.clear();
-    enemySpawnTimer = 0.0f;
-    spawnEnemy();
+    waveManager.reset();
 }
 
 void resetPlayers() {
@@ -370,7 +379,17 @@ void resetPlayers() {
     duckKeyHeld = false;
 }
 
+void restartGame() {
+    resetPlayers();
+    resetEnemies();
+    coins = STARTING_COINS;
+    gameOver = false;
+    gameWon = false;
+    paused = false;
+}
+
 void mouseButtonCallback(GLFWwindow* window, int button, int action, int) {
+    if (gameOver || gameWon) return;
     if (button != GLFW_MOUSE_BUTTON_LEFT || action != GLFW_PRESS) return;
     double x, y;
     glfwGetCursorPos(window, &x, &y);
@@ -398,18 +417,29 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int) {
 }
 
 void keyCallback(GLFWwindow* window, int key, int, int action, int) {
+    if (action != GLFW_PRESS && action != GLFW_REPEAT) {
+        if ((key == GLFW_KEY_S || key == GLFW_KEY_DOWN) && action == GLFW_RELEASE)
+            duckKeyHeld = false;
+        return;
+    }
+
+    if (key == GLFW_KEY_R && action == GLFW_PRESS) {
+        restartGame();
+        return;
+    }
+    if ((gameOver || gameWon) && key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
+        restartGame();
+        return;
+    }
+    // End screens freeze gameplay input; only restart keys above are accepted.
+    if (gameOver || gameWon) return;
+
     if (key == GLFW_KEY_S || key == GLFW_KEY_DOWN) {
-        if (action == GLFW_PRESS || action == GLFW_REPEAT) duckKeyHeld = true;
-        else if (action == GLFW_RELEASE) duckKeyHeld = false;
+        duckKeyHeld = true;
         return;
     }
     if (action != GLFW_PRESS) return;
     if (key == GLFW_KEY_ESCAPE) paused = !paused;
-    if (key == GLFW_KEY_R) {
-        resetPlayers();
-        resetEnemies();
-        coins = STARTING_COINS; gameOver = false; paused = false;
-    }
     if (key == GLFW_KEY_UP || key == GLFW_KEY_W) {
         for (Player& player : players) {
             if (player.alive && player.type != PlayerType::Defense &&
@@ -418,11 +448,6 @@ void keyCallback(GLFWwindow* window, int key, int, int action, int) {
                 player.ducking = false;
             }
         }
-    }
-    if (key == GLFW_KEY_SPACE && gameOver) {
-        resetPlayers();
-        resetEnemies();
-        coins = STARTING_COINS; gameOver = false;
     }
     (void)window;
 }
@@ -438,13 +463,14 @@ int maximumHealth(PlayerType type) {
 float damageTintForHealth(int health, int maxHealth) {
     float healthRatio = static_cast<float>(health) / static_cast<float>(maxHealth);
     healthRatio = std::clamp(healthRatio, 0.0f, 1.0f);
-    return 0.75f * (1.0f - healthRatio);
+    // Strong enough to read after the first hit and steadily redder as health falls.
+    return 0.90f * (1.0f - healthRatio);
 }
 
 void drawHealthBar(float x, float y, int health, int maxHealth, glm::vec3 fillColor) {
-    constexpr float segmentWidth = 0.018f;
+    constexpr float segmentWidth = 0.022f;
     constexpr float segmentGap = 0.004f;
-    constexpr float barHeight = 0.022f;
+    constexpr float barHeight = 0.026f;
     const float totalWidth = maxHealth * segmentWidth + (maxHealth - 1) * segmentGap;
     const float firstCenter = x - totalWidth * 0.5f + segmentWidth * 0.5f;
 
@@ -627,10 +653,14 @@ float enemyProjectileSpeed(EnemyType type) {
 }
 
 void updateCombat(float deltaTime) {
-    enemySpawnTimer += deltaTime;
-    if (enemySpawnTimer >= GameplayTuning::ENEMY_SPAWN_INTERVAL) {
-        spawnEnemy();
-        enemySpawnTimer = 0.0f;
+    int aliveEnemyCount = 0;
+    for (const Enemy& enemy : enemies) if (enemy.alive) ++aliveEnemyCount;
+    EnemyType nextEnemyType;
+    if (waveManager.update(deltaTime, aliveEnemyCount, nextEnemyType))
+        spawnEnemy(nextEnemyType);
+    if (waveManager.isComplete() && aliveEnemyCount == 0) {
+        gameWon = true;
+        return;
     }
 
     for (Player& player : players) {
@@ -1037,9 +1067,11 @@ void renderScene() {
     drawPlayerCards();
     drawCoinCount();
 
-    if (paused || gameOver) {
+    if (paused || gameOver || gameWon) {
         drawShape(rectangleShape, 0,0, 0.90f,0.44f, glm::vec3(0.10f,0.11f,0.13f));
-        drawShape(rectangleShape, 0,0.08f, 0.54f,0.06f, gameOver ? glm::vec3(0.78f,0.18f,0.15f) : glm::vec3(0.95f,0.75f,0.18f));
+        glm::vec3 statusColor = gameWon ? glm::vec3(0.18f,0.72f,0.28f)
+            : (gameOver ? glm::vec3(0.78f,0.18f,0.15f) : glm::vec3(0.95f,0.75f,0.18f));
+        drawShape(rectangleShape, 0,0.08f, 0.54f,0.06f, statusColor);
         drawShape(rectangleShape, 0,-0.08f, 0.34f,0.04f, glm::vec3(0.85f,0.85f,0.85f));
     }
 }
@@ -1080,14 +1112,25 @@ int main() {
     damageTintLocation = glGetUniformLocation(shaderProgram, "u_DamageTint");
     createGeometry();
     std::srand(static_cast<unsigned int>(std::time(nullptr)));
-    spawnEnemy();
     std::cout << "Controls: click lanes to toggle selection; W/Up jumps and hold S/Down to duck; Esc pauses; R resets.\n";
 
+    int displayedGameState = 0;
     while (!glfwWindowShouldClose(window)) {
+        const int gameState = gameWon ? 2 : (gameOver ? 1 : 0);
+        if (gameState != displayedGameState) {
+            if (gameWon) {
+                glfwSetWindowTitle(window, "Temple Defense - Victory! Press Space to restart");
+            } else if (gameOver) {
+                glfwSetWindowTitle(window, "Temple Defense - Game Over. Press Space to restart");
+            } else {
+                glfwSetWindowTitle(window, "Temple Defense - Starter");
+            }
+            displayedGameState = gameState;
+        }
         float now = static_cast<float>(glfwGetTime());
         float deltaTime = std::min(now - lastFrameTime, 0.05f);
         lastFrameTime = now;
-        if (!paused && !gameOver) {
+        if (!paused && !gameOver && !gameWon) {
             updateCombat(deltaTime);
         }
 

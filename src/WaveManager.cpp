@@ -1,2 +1,2 @@
-// WaveManager definitions will be added when wave progression is extracted
-// from main.cpp.
+// WaveManager is implemented inline in WaveManager.h because the existing
+// CMake target intentionally remains unchanged and does not compile this file.
