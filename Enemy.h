@@ -12,7 +12,8 @@ struct Enemy {
     EnemyType type;
     glm::vec2 pos;
     int lane;
-    float speed;
+    float speedPixelsPerSecond;
     int health;
     bool alive;
+    bool engaged;
 };

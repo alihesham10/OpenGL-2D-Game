@@ -23,8 +23,39 @@ constexpr int WINDOW_H = 700;
 constexpr int LANE_COUNT = 3;
 constexpr float LANE_HEIGHT = 0.32f;
 constexpr float LANE_Y[LANE_COUNT] = {-0.125f, -0.48f, -0.835f};
-constexpr float JUMP_DURATION = 0.55f;
+
+namespace GameplayTuning {
+constexpr float EASY_ENEMY_SPEED_PIXELS_PER_SECOND = 45.0f;
+constexpr float MEDIUM_ENEMY_SPEED_PIXELS_PER_SECOND = 55.0f;
+constexpr float HARD_ENEMY_SPEED_PIXELS_PER_SECOND = 35.0f;
+constexpr float MELEE_PLAYER_SPEED_PIXELS_PER_SECOND = 45.0f;
+constexpr float LONG_RANGE_PLAYER_SPEED_PIXELS_PER_SECOND = 45.0f;
+constexpr float DEFENSE_PLAYER_SPEED_PIXELS_PER_SECOND = 0.0f;
+
+constexpr float EASY_ENEMY_ATTACK_INTERVAL = 2.0f;
+constexpr float MEDIUM_ENEMY_ATTACK_INTERVAL = 1.5f;
+constexpr float HARD_ENEMY_ATTACK_INTERVAL = 1.2f;
+constexpr float MELEE_PLAYER_ATTACK_INTERVAL = 1.0f;
+constexpr float LONG_RANGE_PLAYER_ATTACK_INTERVAL = 1.5f;
+constexpr float DEFENSE_ACTION_INTERVAL = 1.0f;
+
+constexpr float PLAYER_PROJECTILE_SPEED_PIXELS_PER_SECOND = 300.0f;
+constexpr float EASY_ENEMY_PROJECTILE_SPEED_PIXELS_PER_SECOND = 180.0f;
+constexpr float MEDIUM_ENEMY_PROJECTILE_SPEED_PIXELS_PER_SECOND = 220.0f;
+
 constexpr float ENEMY_SPAWN_INTERVAL = 3.0f;
+constexpr float JUMP_DURATION = 0.55f;
+constexpr float MELEE_ATTACK_ANIMATION_DURATION = 0.20f;
+constexpr float MELEE_WEAPON_REACH_NDC = 0.08f;
+constexpr float HOME_BASE_X = -0.78f;
+constexpr float PLAYER_RIGHT_LIMIT = 0.80f;
+constexpr float MELEE_BODY_WIDTH_NDC = 0.075f;
+constexpr float DEFENSE_BODY_WIDTH_NDC = 0.14f;
+constexpr float LONG_RANGE_BODY_WIDTH_NDC = 0.065f;
+constexpr float EASY_ENEMY_BODY_WIDTH_NDC = 0.075f;
+constexpr float MEDIUM_ENEMY_BODY_WIDTH_NDC = 0.13f;
+constexpr float HARD_ENEMY_BODY_WIDTH_NDC = 0.14f;
+}
 
 const char* vertexShaderSource = R"(
 #version 330 core
@@ -60,8 +91,12 @@ struct Player {
     int lane;
     int health;
     bool alive;
+    float speedPixelsPerSecond;
     float jumpTimer;
     bool ducking;
+    float attackCooldown;
+    float attackAnimationTimer;
+    int engagedEnemy;
 };
 
 GLuint shaderProgram = 0;
@@ -72,7 +107,8 @@ Shape rectangleShape, triangleShape, circleShape;
 bool selectedLanes[LANE_COUNT] = {false, true, false};
 int hoveredLane = -1;
 std::vector<Player> players{
-    {PlayerType::Melee, glm::vec2(-0.62f, LANE_Y[1]), 1, 5, true, 0.0f, false}
+    {PlayerType::Melee, glm::vec2(-0.62f, LANE_Y[1]), 1, 5, true,
+     GameplayTuning::MELEE_PLAYER_SPEED_PIXELS_PER_SECOND, 0.0f, false, 0.0f, 0.0f, -1}
 };
 bool duckKeyHeld = false;
 std::vector<Enemy> enemies;
@@ -201,7 +237,7 @@ void cursorPositionCallback(GLFWwindow*, double x, double y) {
 void spawnEnemy() {
     int lane = std::rand() % LANE_COUNT;
     enemies.push_back({EnemyType::EasyUpperRanged, glm::vec2(0.90f, LANE_Y[lane]),
-                       lane, 0.10f, 5, true});
+                       lane, GameplayTuning::EASY_ENEMY_SPEED_PIXELS_PER_SECOND, 5, true, false});
 }
 
 void resetEnemies() {
@@ -212,7 +248,9 @@ void resetEnemies() {
 
 void resetPlayers() {
     players.clear();
-    players.push_back({PlayerType::Melee, glm::vec2(-0.62f, LANE_Y[1]), 1, 5, true, 0.0f, false});
+    players.push_back({PlayerType::Melee, glm::vec2(-0.62f, LANE_Y[1]), 1, 5, true,
+                       GameplayTuning::MELEE_PLAYER_SPEED_PIXELS_PER_SECOND,
+                       0.0f, false, 0.0f, 0.0f, -1});
     selectedLanes[0] = false;
     selectedLanes[1] = true;
     selectedLanes[2] = false;
@@ -245,7 +283,7 @@ void keyCallback(GLFWwindow* window, int key, int, int action, int) {
         for (Player& player : players) {
             if (player.alive && player.type != PlayerType::Defense &&
                 selectedLanes[player.lane]) {
-                player.jumpTimer = JUMP_DURATION;
+                player.jumpTimer = GameplayTuning::JUMP_DURATION;
                 player.ducking = false;
             }
         }
@@ -353,10 +391,12 @@ void drawPlayerPart(const Shape& shape, float x, float y, float offsetX, float o
 }
 
 void drawPlayerCharacter(float x, float y, PlayerType playerType,
-                         int health, float jumpOffset = 0.0f, bool ducking = false) {
+                         int health, float jumpOffset = 0.0f, bool ducking = false,
+                         bool meleeAttacking = false) {
     currentDamageTint = damageTintForHealth(health, maximumHealth(playerType));
     const glm::vec3 skin(0.82f,0.60f,0.40f);
     const glm::vec3 darkCloth(0.22f, 0.18f, 0.15f);
+    const float swordRotation = meleeAttacking ? -0.95f : -0.35f;
     switch (playerType) {
     case PlayerType::Melee:
         // Light tunic, separate legs, and a short sword.
@@ -371,9 +411,9 @@ void drawPlayerCharacter(float x, float y, PlayerType playerType,
         drawPlayerPart(rectangleShape, x, y, 0.025f, -0.17f, 0.025f, 0.10f,
                        darkCloth, 0, jumpOffset, ducking);
         drawPlayerPart(rectangleShape, x, y, 0.075f, -0.005f, 0.105f, 0.018f,
-                       glm::vec3(0.75f,0.76f,0.72f), -0.35f, jumpOffset, ducking);
+                       glm::vec3(0.75f,0.76f,0.72f), swordRotation, jumpOffset, ducking);
         drawPlayerPart(rectangleShape, x, y, 0.035f, -0.015f, 0.035f, 0.025f,
-                       glm::vec3(0.42f,0.24f,0.10f), -0.35f, jumpOffset, ducking);
+                       glm::vec3(0.42f,0.24f,0.10f), swordRotation, jumpOffset, ducking);
         break;
 
     case PlayerType::Defense:
@@ -413,6 +453,118 @@ void drawPlayerCharacter(float x, float y, PlayerType playerType,
         break;
     }
     currentDamageTint = 0.0f;
+}
+
+float playerBodyWidth(PlayerType type) {
+    if (type == PlayerType::Defense) return GameplayTuning::DEFENSE_BODY_WIDTH_NDC;
+    if (type == PlayerType::LongRange) return GameplayTuning::LONG_RANGE_BODY_WIDTH_NDC;
+    return GameplayTuning::MELEE_BODY_WIDTH_NDC;
+}
+
+float enemyBodyWidth(EnemyType type) {
+    if (type == EnemyType::MediumLowerRanged) return GameplayTuning::MEDIUM_ENEMY_BODY_WIDTH_NDC;
+    if (type == EnemyType::HardMelee) return GameplayTuning::HARD_ENEMY_BODY_WIDTH_NDC;
+    return GameplayTuning::EASY_ENEMY_BODY_WIDTH_NDC;
+}
+
+float contactDistance(const Player& player, const Enemy& enemy) {
+    float distance = 0.5f * (playerBodyWidth(player.type) + enemyBodyWidth(enemy.type));
+    if (player.type == PlayerType::Melee) distance += GameplayTuning::MELEE_WEAPON_REACH_NDC;
+    return distance;
+}
+
+float pixelsPerSecondToNdc(float speedPixelsPerSecond) {
+    return 2.0f * speedPixelsPerSecond / WINDOW_W;
+}
+
+void updateCombat(float deltaTime) {
+    enemySpawnTimer += deltaTime;
+    if (enemySpawnTimer >= GameplayTuning::ENEMY_SPAWN_INTERVAL) {
+        spawnEnemy();
+        enemySpawnTimer = 0.0f;
+    }
+
+    for (Player& player : players) {
+        if (!player.alive) continue;
+        player.jumpTimer = std::max(0.0f, player.jumpTimer - deltaTime);
+        player.attackAnimationTimer = std::max(0.0f, player.attackAnimationTimer - deltaTime);
+        player.ducking = player.type != PlayerType::Defense && player.jumpTimer <= 0.0f &&
+            selectedLanes[player.lane] && duckKeyHeld;
+
+        if (player.engagedEnemy >= 0) {
+            if (player.engagedEnemy >= static_cast<int>(enemies.size()) ||
+                !enemies[player.engagedEnemy].alive) {
+                player.engagedEnemy = -1;
+                player.attackCooldown = 0.0f;
+            }
+        }
+
+        if (player.engagedEnemy < 0 && player.type != PlayerType::Defense) {
+            player.pos.x = std::min(GameplayTuning::PLAYER_RIGHT_LIMIT,
+                                    player.pos.x + pixelsPerSecondToNdc(player.speedPixelsPerSecond) * deltaTime);
+        }
+    }
+
+    for (Enemy& enemy : enemies) {
+        if (!enemy.alive || enemy.engaged) continue;
+        float nextX = enemy.pos.x - pixelsPerSecondToNdc(enemy.speedPixelsPerSecond) * deltaTime;
+        bool waitingAtCombat = false;
+        for (const Player& player : players) {
+            if (!player.alive || player.lane != enemy.lane || player.engagedEnemy < 0) continue;
+            float distance = contactDistance(player, enemy);
+            if (enemy.pos.x >= player.pos.x && nextX <= player.pos.x + distance) {
+                enemy.pos.x = player.pos.x + distance;
+                waitingAtCombat = true;
+                break;
+            }
+        }
+        if (!waitingAtCombat) enemy.pos.x = nextX;
+        if (enemy.pos.x <= GameplayTuning::HOME_BASE_X) {
+            gameOver = true;
+            return;
+        }
+    }
+
+    for (Player& player : players) {
+        if (!player.alive || player.type != PlayerType::Melee || player.engagedEnemy >= 0) continue;
+        int closestEnemy = -1;
+        float closestDistance = 100.0f;
+        for (int i = 0; i < static_cast<int>(enemies.size()); ++i) {
+            Enemy& enemy = enemies[i];
+            if (!enemy.alive || enemy.engaged || enemy.lane != player.lane) continue;
+            float distance = std::abs(enemy.pos.x - player.pos.x);
+            if (distance <= contactDistance(player, enemy) && distance < closestDistance) {
+                closestDistance = distance;
+                closestEnemy = i;
+            }
+        }
+        if (closestEnemy >= 0) {
+            player.engagedEnemy = closestEnemy;
+            player.attackCooldown = 0.0f;
+            enemies[closestEnemy].engaged = true;
+        }
+    }
+
+    for (Player& player : players) {
+        if (!player.alive || player.engagedEnemy < 0) continue;
+        Enemy& enemy = enemies[player.engagedEnemy];
+        if (!enemy.alive) {
+            player.engagedEnemy = -1;
+            continue;
+        }
+        player.attackCooldown -= deltaTime;
+        if (player.attackCooldown <= 0.0f) {
+            enemy.health -= 1;
+            player.attackCooldown = GameplayTuning::MELEE_PLAYER_ATTACK_INTERVAL;
+            player.attackAnimationTimer = GameplayTuning::MELEE_ATTACK_ANIMATION_DURATION;
+            if (enemy.health <= 0) {
+                enemy.alive = false;
+                enemy.engaged = false;
+                player.engagedEnemy = -1;
+                player.attackCooldown = 0.0f;
+            }
+        }
+    }
 }
 
 void drawPalmTree(float x, float groundY) {
@@ -475,12 +627,12 @@ void renderScene() {
     for (Player& player : players) {
         if (!player.alive || player.lane < 0 || player.lane >= LANE_COUNT) continue;
         player.pos.y = LANE_Y[player.lane];
-        float jumpProgress = 1.0f - player.jumpTimer / JUMP_DURATION;
+        float jumpProgress = 1.0f - player.jumpTimer / GameplayTuning::JUMP_DURATION;
         float jumpOffset = player.jumpTimer > 0.0f
             ? 0.20f * std::sin(jumpProgress * 3.14159265f)
             : 0.0f;
         drawPlayerCharacter(player.pos.x, player.pos.y, player.type, player.health,
-                            jumpOffset, player.ducking);
+                            jumpOffset, player.ducking, player.attackAnimationTimer > 0.0f);
         drawHealthBar(player.pos.x, player.pos.y + 0.155f + jumpOffset,
                       player.health, maximumHealth(player.type),
                       glm::vec3(0.22f, 0.76f, 0.24f));
@@ -558,24 +710,7 @@ int main() {
         float deltaTime = std::min(now - lastFrameTime, 0.05f);
         lastFrameTime = now;
         if (!paused && !gameOver) {
-            enemySpawnTimer += deltaTime;
-            if (enemySpawnTimer >= ENEMY_SPAWN_INTERVAL) {
-                spawnEnemy();
-                enemySpawnTimer = 0.0f;
-            }
-            for (Player& player : players) {
-                player.jumpTimer = std::max(0.0f, player.jumpTimer - deltaTime);
-                player.ducking = player.alive && player.type != PlayerType::Defense &&
-                    player.jumpTimer <= 0.0f && selectedLanes[player.lane] && duckKeyHeld;
-            }
-            for (Enemy& enemy : enemies) {
-                if (!enemy.alive) continue;
-                enemy.pos.x -= enemy.speed * deltaTime;
-                if (enemy.pos.x < -0.78f) {
-                    gameOver = true;
-                    break;
-                }
-            }
+            updateCombat(deltaTime);
             if (glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS) coins = 1;
         }
 
