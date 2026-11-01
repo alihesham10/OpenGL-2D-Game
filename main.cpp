@@ -20,6 +20,7 @@ constexpr int WINDOW_H = 700;
 constexpr int LANE_COUNT = 3;
 constexpr float LANE_HEIGHT = 0.32f;
 constexpr float LANE_Y[LANE_COUNT] = {-0.125f, -0.48f, -0.835f};
+constexpr float JUMP_DURATION = 0.55f;
 
 const char* vertexShaderSource = R"(
 #version 330 core
@@ -44,14 +45,26 @@ void main() { FragColor = vec4(vColor * u_Tint, 1.0); }
 struct Vertex { float x, y, r, g, b; };
 struct Shape { GLuint vao = 0, vbo = 0; GLsizei count = 0; GLenum mode = GL_TRIANGLES; };
 struct Enemy { glm::vec2 pos; int lane; float speed; int hp; bool alive; };
+enum class PlayerType { Melee, Defense, LongRange };
+struct Player {
+    PlayerType type;
+    glm::vec2 pos;
+    int lane;
+    int health;
+    bool alive;
+    float jumpTimer;
+    bool ducking;
+};
 
 GLuint shaderProgram = 0;
 GLint transformLocation = -1;
 Shape rectangleShape, triangleShape, circleShape;
-int selectedLane = 1;
+bool selectedLanes[LANE_COUNT] = {false, true, false};
 int hoveredLane = -1;
-float playerX = -0.62f;
-float playerY = 0.0f;
+std::vector<Player> players{
+    {PlayerType::Melee, glm::vec2(-0.62f, LANE_Y[1]), 1, 5, true, 0.0f, false}
+};
+bool duckKeyHeld = false;
 float enemyX = 0.72f;
 float enemySpeed = 0.10f;
 int coins = 0;
@@ -175,45 +188,130 @@ void cursorPositionCallback(GLFWwindow*, double x, double y) {
     hoveredLane = laneFromY(p.y);
 }
 
+void resetPlayers() {
+    players.clear();
+    players.push_back({PlayerType::Melee, glm::vec2(-0.62f, LANE_Y[1]), 1, 5, true, 0.0f, false});
+    selectedLanes[0] = false;
+    selectedLanes[1] = true;
+    selectedLanes[2] = false;
+    duckKeyHeld = false;
+}
+
 void mouseButtonCallback(GLFWwindow* window, int button, int action, int) {
     if (button != GLFW_MOUSE_BUTTON_LEFT || action != GLFW_PRESS) return;
     double x, y;
     glfwGetCursorPos(window, &x, &y);
     glm::vec2 p = cursorToNdc(x, y);
     int lane = laneFromY(p.y);
-    if (lane >= 0) selectedLane = lane;
+    if (lane >= 0) selectedLanes[lane] = !selectedLanes[lane];
 }
 
 void keyCallback(GLFWwindow* window, int key, int, int action, int) {
+    if (key == GLFW_KEY_S || key == GLFW_KEY_DOWN) {
+        if (action == GLFW_PRESS || action == GLFW_REPEAT) duckKeyHeld = true;
+        else if (action == GLFW_RELEASE) duckKeyHeld = false;
+        return;
+    }
     if (action != GLFW_PRESS) return;
     if (key == GLFW_KEY_ESCAPE) paused = !paused;
     if (key == GLFW_KEY_R) {
-        playerX = -0.62f; enemyX = 0.72f; coins = 0; gameOver = false; paused = false;
+        resetPlayers();
+        enemyX = 0.72f; coins = 0; gameOver = false; paused = false;
     }
-    if (key == GLFW_KEY_UP || key == GLFW_KEY_W) selectedLane = std::max(0, selectedLane - 1);
-    if (key == GLFW_KEY_DOWN || key == GLFW_KEY_S) selectedLane = std::min(LANE_COUNT - 1, selectedLane + 1);
-    if (key == GLFW_KEY_LEFT || key == GLFW_KEY_A) playerX = std::max(-0.80f, playerX - 0.06f);
-    if (key == GLFW_KEY_RIGHT || key == GLFW_KEY_D) playerX = std::min(-0.38f, playerX + 0.06f);
+    if (key == GLFW_KEY_UP || key == GLFW_KEY_W) {
+        for (Player& player : players) {
+            if (player.alive && player.type != PlayerType::Defense &&
+                selectedLanes[player.lane]) {
+                player.jumpTimer = JUMP_DURATION;
+                player.ducking = false;
+            }
+        }
+    }
     if (key == GLFW_KEY_SPACE && gameOver) {
-        playerX = -0.62f; enemyX = 0.72f; coins = 0; gameOver = false;
+        resetPlayers();
+        enemyX = 0.72f; coins = 0; gameOver = false;
     }
     (void)window;
 }
 
-void drawCharacter(float x, float y, bool enemy) {
-    // Simple placeholder characters built from basic primitives.
-    glm::vec3 skin = enemy ? glm::vec3(0.66f,0.40f,0.24f) : glm::vec3(0.82f,0.60f,0.40f);
-    glm::vec3 clothes = enemy ? glm::vec3(0.35f,0.15f,0.12f) : glm::vec3(0.78f,0.68f,0.48f);
-    drawShape(rectangleShape, x, y - 0.08f, enemy ? 0.09f : 0.08f, 0.18f, clothes);
-    drawShape(circleShape, x, y + 0.055f, 0.055f, 0.055f, skin);
-    drawShape(rectangleShape, x, y - 0.19f, 0.035f, 0.10f, glm::vec3(0.22f,0.18f,0.15f));
-    drawShape(rectangleShape, x + (enemy ? -0.075f : 0.075f), y - 0.02f, 0.07f, 0.025f,
-              enemy ? glm::vec3(0.25f,0.25f,0.25f) : glm::vec3(0.45f,0.25f,0.10f), enemy ? 0.0f : -0.3f);
+void drawPlayerPart(const Shape& shape, float x, float y, float offsetX, float offsetY,
+                    float sx, float sy, glm::vec3 color, float rotation,
+                    float jumpOffset, bool ducking) {
+    const float heightScale = ducking ? 0.65f : 1.0f;
+    const float poseOffset = jumpOffset - (ducking ? 0.025f : 0.0f);
+    drawShape(shape, x + offsetX, y + poseOffset + offsetY * heightScale,
+              sx, sy * heightScale, color, rotation);
+}
+
+void drawCharacter(float x, float y, bool enemy, PlayerType playerType = PlayerType::Melee,
+                   float jumpOffset = 0.0f, bool ducking = false) {
+    const glm::vec3 skin = enemy ? glm::vec3(0.66f,0.40f,0.24f) : glm::vec3(0.82f,0.60f,0.40f);
     if (enemy) {
+        // Keep the existing placeholder enemy drawing unchanged.
+        drawShape(rectangleShape, x, y - 0.08f, 0.09f, 0.18f, glm::vec3(0.35f,0.15f,0.12f));
+        drawShape(circleShape, x, y + 0.055f, 0.055f, 0.055f, skin);
+        drawShape(rectangleShape, x, y - 0.19f, 0.035f, 0.10f, glm::vec3(0.22f,0.18f,0.15f));
+        drawShape(rectangleShape, x - 0.075f, y - 0.02f, 0.07f, 0.025f,
+                  glm::vec3(0.25f,0.25f,0.25f));
         drawShape(rectangleShape, x, y + 0.085f, 0.11f, 0.025f, glm::vec3(0.12f,0.10f,0.09f));
-    } else {
-        // Tiny dark hair shape.
-        drawShape(rectangleShape, x, y + 0.095f, 0.08f, 0.025f, glm::vec3(0.16f,0.10f,0.06f));
+        return;
+    }
+
+    const glm::vec3 darkCloth(0.22f, 0.18f, 0.15f);
+    switch (playerType) {
+    case PlayerType::Melee:
+        // Light tunic, separate legs, and a short sword.
+        drawPlayerPart(rectangleShape, x, y, 0, -0.075f, 0.075f, 0.15f,
+                       glm::vec3(0.78f,0.68f,0.48f), 0, jumpOffset, ducking);
+        drawPlayerPart(circleShape, x, y, 0, 0.065f, 0.05f, 0.05f,
+                       skin, 0, jumpOffset, ducking);
+        drawPlayerPart(rectangleShape, x, y, 0, 0.105f, 0.075f, 0.022f,
+                       glm::vec3(0.16f,0.10f,0.06f), 0, jumpOffset, ducking);
+        drawPlayerPart(rectangleShape, x, y, -0.025f, -0.17f, 0.025f, 0.10f,
+                       darkCloth, 0, jumpOffset, ducking);
+        drawPlayerPart(rectangleShape, x, y, 0.025f, -0.17f, 0.025f, 0.10f,
+                       darkCloth, 0, jumpOffset, ducking);
+        drawPlayerPart(rectangleShape, x, y, 0.075f, -0.005f, 0.105f, 0.018f,
+                       glm::vec3(0.75f,0.76f,0.72f), -0.35f, jumpOffset, ducking);
+        drawPlayerPart(rectangleShape, x, y, 0.035f, -0.015f, 0.035f, 0.025f,
+                       glm::vec3(0.42f,0.24f,0.10f), -0.35f, jumpOffset, ducking);
+        break;
+
+    case PlayerType::Defense:
+        // Broad build, helmet, and a large shield make this type read as a blocker.
+        drawPlayerPart(rectangleShape, x, y, 0, -0.075f, 0.14f, 0.17f,
+                       glm::vec3(0.46f,0.50f,0.43f), 0, jumpOffset, ducking);
+        drawPlayerPart(circleShape, x, y, 0, 0.065f, 0.052f, 0.052f,
+                       skin, 0, jumpOffset, ducking);
+        drawPlayerPart(rectangleShape, x, y, 0, 0.105f, 0.11f, 0.035f,
+                       glm::vec3(0.53f,0.39f,0.18f), 0, jumpOffset, ducking);
+        drawPlayerPart(rectangleShape, x, y, -0.035f, -0.17f, 0.035f, 0.10f,
+                       darkCloth, 0, jumpOffset, ducking);
+        drawPlayerPart(rectangleShape, x, y, 0.035f, -0.17f, 0.035f, 0.10f,
+                       darkCloth, 0, jumpOffset, ducking);
+        drawPlayerPart(rectangleShape, x, y, 0.11f, -0.045f, 0.075f, 0.19f,
+                       glm::vec3(0.40f,0.25f,0.12f), 0, jumpOffset, ducking);
+        drawPlayerPart(triangleShape, x, y, 0.11f, -0.16f, 0.075f, 0.07f,
+                       glm::vec3(0.40f,0.25f,0.12f), 0, jumpOffset, ducking);
+        break;
+
+    case PlayerType::LongRange:
+        // Lean clothing and a long bow with an arrow distinguish the ranged type.
+        drawPlayerPart(rectangleShape, x, y, 0, -0.075f, 0.065f, 0.15f,
+                       glm::vec3(0.43f,0.47f,0.30f), 0, jumpOffset, ducking);
+        drawPlayerPart(circleShape, x, y, 0, 0.065f, 0.048f, 0.05f,
+                       skin, 0, jumpOffset, ducking);
+        drawPlayerPart(triangleShape, x, y, 0, 0.09f, 0.11f, 0.10f,
+                       glm::vec3(0.31f,0.34f,0.24f), 0, jumpOffset, ducking);
+        drawPlayerPart(rectangleShape, x, y, -0.022f, -0.17f, 0.024f, 0.10f,
+                       darkCloth, 0, jumpOffset, ducking);
+        drawPlayerPart(rectangleShape, x, y, 0.022f, -0.17f, 0.024f, 0.10f,
+                       darkCloth, 0, jumpOffset, ducking);
+        drawPlayerPart(rectangleShape, x, y, 0.09f, -0.025f, 0.025f, 0.19f,
+                       glm::vec3(0.48f,0.28f,0.12f), -0.15f, jumpOffset, ducking);
+        drawPlayerPart(rectangleShape, x, y, 0.085f, -0.02f, 0.105f, 0.012f,
+                       glm::vec3(0.78f,0.70f,0.45f), 0, jumpOffset, ducking);
+        break;
     }
 }
 
@@ -262,18 +360,28 @@ void renderScene() {
     drawTorch(0.92f, 0.18f);
     drawTorch(0.92f, -0.73f);
 
-    // Three lanes and separators. Hovered lane is lighter; selected lane has a green marker.
+    // Hovered lanes brighten; selected lanes keep a warm highlight and marker.
     for (int i = 0; i < 3; ++i) {
-        glm::vec3 laneColor = (i == hoveredLane) ? glm::vec3(0.90f,0.77f,0.52f) : glm::vec3(0.73f,0.57f,0.34f);
+        glm::vec3 laneColor = glm::vec3(0.73f,0.57f,0.34f);
+        if (selectedLanes[i]) laneColor = glm::vec3(0.82f,0.66f,0.42f);
+        if (i == hoveredLane) laneColor = glm::vec3(0.90f,0.77f,0.52f);
         drawShape(rectangleShape, 0.10f, LANE_Y[i], 1.48f, LANE_HEIGHT, laneColor);
         drawShape(rectangleShape, 0.10f, LANE_Y[i] - 0.17f, 1.48f, 0.012f, glm::vec3(0.48f,0.37f,0.24f));
-        if (i == selectedLane)
+        if (selectedLanes[i])
             drawShape(triangleShape, -0.68f, LANE_Y[i], 0.045f, 0.07f, glm::vec3(0.20f,0.75f,0.28f));
     }
 
-    // Placeholder player and enemy on the selected lane.
-    playerY = LANE_Y[selectedLane];
-    drawCharacter(playerX, playerY, false);
+    // Draw every living player at the lane where it was placed.
+    for (Player& player : players) {
+        if (!player.alive || player.lane < 0 || player.lane >= LANE_COUNT) continue;
+        player.pos.y = LANE_Y[player.lane];
+        float jumpProgress = 1.0f - player.jumpTimer / JUMP_DURATION;
+        float jumpOffset = player.jumpTimer > 0.0f
+            ? 0.20f * std::sin(jumpProgress * 3.14159265f)
+            : 0.0f;
+        drawCharacter(player.pos.x, player.pos.y, false, player.type,
+                      jumpOffset, player.ducking);
+    }
     if (!gameOver) drawCharacter(enemyX, LANE_Y[1], true);
 
     // A coin-like collectible. (Press C to collect the demo coin.)
@@ -328,13 +436,18 @@ int main() {
     shaderProgram = createProgram();
     transformLocation = glGetUniformLocation(shaderProgram, "u_Transform");
     createGeometry();
-    std::cout << "Controls: click a lane or use W/S or Up/Down to select it; A/D moves the player; Esc pauses; R resets.\n";
+    std::cout << "Controls: click lanes to toggle selection; W/Up jumps and hold S/Down to duck; Esc pauses; R resets.\n";
 
     while (!glfwWindowShouldClose(window)) {
         float now = static_cast<float>(glfwGetTime());
         float deltaTime = std::min(now - lastFrameTime, 0.05f);
         lastFrameTime = now;
         if (!paused && !gameOver) {
+            for (Player& player : players) {
+                player.jumpTimer = std::max(0.0f, player.jumpTimer - deltaTime);
+                player.ducking = player.alive && player.type != PlayerType::Defense &&
+                    player.jumpTimer <= 0.0f && selectedLanes[player.lane] && duckKeyHeld;
+            }
             enemyX -= enemySpeed * deltaTime;
             if (enemyX < -0.78f) gameOver = true;
             if (glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS) coins = 1;
