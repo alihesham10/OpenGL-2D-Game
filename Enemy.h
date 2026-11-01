@@ -16,4 +16,5 @@ struct Enemy {
     int health;
     bool alive;
     bool engaged;
+    float attackCooldown;
 };

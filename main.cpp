@@ -35,6 +35,9 @@ constexpr float DEFENSE_PLAYER_SPEED_PIXELS_PER_SECOND = 0.0f;
 constexpr float EASY_ENEMY_ATTACK_INTERVAL = 2.0f;
 constexpr float MEDIUM_ENEMY_ATTACK_INTERVAL = 1.5f;
 constexpr float HARD_ENEMY_ATTACK_INTERVAL = 1.2f;
+constexpr int EASY_ENEMY_DAMAGE = 1;
+constexpr int MEDIUM_ENEMY_DAMAGE = 1;
+constexpr int HARD_ENEMY_DAMAGE = 2;
 constexpr float MELEE_PLAYER_ATTACK_INTERVAL = 1.0f;
 constexpr float LONG_RANGE_PLAYER_ATTACK_INTERVAL = 1.5f;
 constexpr float DEFENSE_ACTION_INTERVAL = 1.0f;
@@ -99,6 +102,16 @@ struct Player {
     int engagedEnemy;
 };
 
+enum class EnemyProjectileHeight { Upper, Lower };
+struct EnemyProjectile {
+    glm::vec2 pos;
+    int lane;
+    float speedPixelsPerSecond;
+    int damage;
+    EnemyProjectileHeight height;
+    bool alive;
+};
+
 GLuint shaderProgram = 0;
 GLint transformLocation = -1;
 GLint damageTintLocation = -1;
@@ -112,6 +125,7 @@ std::vector<Player> players{
 };
 bool duckKeyHeld = false;
 std::vector<Enemy> enemies;
+std::vector<EnemyProjectile> enemyProjectiles;
 float enemySpawnTimer = 0.0f;
 int coins = 0;
 bool paused = false;
@@ -237,11 +251,12 @@ void cursorPositionCallback(GLFWwindow*, double x, double y) {
 void spawnEnemy() {
     int lane = std::rand() % LANE_COUNT;
     enemies.push_back({EnemyType::EasyUpperRanged, glm::vec2(0.90f, LANE_Y[lane]),
-                       lane, GameplayTuning::EASY_ENEMY_SPEED_PIXELS_PER_SECOND, 5, true, false});
+                       lane, GameplayTuning::EASY_ENEMY_SPEED_PIXELS_PER_SECOND, 5, true, false, 0.0f});
 }
 
 void resetEnemies() {
     enemies.clear();
+    enemyProjectiles.clear();
     enemySpawnTimer = 0.0f;
     spawnEnemy();
 }
@@ -477,6 +492,18 @@ float pixelsPerSecondToNdc(float speedPixelsPerSecond) {
     return 2.0f * speedPixelsPerSecond / WINDOW_W;
 }
 
+float enemyAttackInterval(EnemyType type) {
+    if (type == EnemyType::MediumLowerRanged) return GameplayTuning::MEDIUM_ENEMY_ATTACK_INTERVAL;
+    if (type == EnemyType::HardMelee) return GameplayTuning::HARD_ENEMY_ATTACK_INTERVAL;
+    return GameplayTuning::EASY_ENEMY_ATTACK_INTERVAL;
+}
+
+float enemyProjectileSpeed(EnemyType type) {
+    if (type == EnemyType::MediumLowerRanged)
+        return GameplayTuning::MEDIUM_ENEMY_PROJECTILE_SPEED_PIXELS_PER_SECOND;
+    return GameplayTuning::EASY_ENEMY_PROJECTILE_SPEED_PIXELS_PER_SECOND;
+}
+
 void updateCombat(float deltaTime) {
     enemySpawnTimer += deltaTime;
     if (enemySpawnTimer >= GameplayTuning::ENEMY_SPAWN_INTERVAL) {
@@ -506,24 +533,85 @@ void updateCombat(float deltaTime) {
     }
 
     for (Enemy& enemy : enemies) {
-        if (!enemy.alive || enemy.engaged) continue;
-        float nextX = enemy.pos.x - pixelsPerSecondToNdc(enemy.speedPixelsPerSecond) * deltaTime;
-        bool waitingAtCombat = false;
-        for (const Player& player : players) {
-            if (!player.alive || player.lane != enemy.lane || player.engagedEnemy < 0) continue;
-            float distance = contactDistance(player, enemy);
-            if (enemy.pos.x >= player.pos.x && nextX <= player.pos.x + distance) {
-                enemy.pos.x = player.pos.x + distance;
-                waitingAtCombat = true;
-                break;
+        if (!enemy.alive) continue;
+        if (!enemy.engaged) {
+            float nextX = enemy.pos.x - pixelsPerSecondToNdc(enemy.speedPixelsPerSecond) * deltaTime;
+            bool waitingAtCombat = false;
+            for (const Player& player : players) {
+                if (!player.alive || player.lane != enemy.lane || player.engagedEnemy < 0) continue;
+                float distance = contactDistance(player, enemy);
+                if (enemy.pos.x >= player.pos.x && nextX <= player.pos.x + distance) {
+                    enemy.pos.x = player.pos.x + distance;
+                    waitingAtCombat = true;
+                    break;
+                }
             }
+            if (!waitingAtCombat) enemy.pos.x = nextX;
         }
-        if (!waitingAtCombat) enemy.pos.x = nextX;
         if (enemy.pos.x <= GameplayTuning::HOME_BASE_X) {
             gameOver = true;
             return;
         }
+
+        Player* target = nullptr;
+        float nearestDistance = 100.0f;
+        for (Player& player : players) {
+            if (!player.alive || player.lane != enemy.lane) continue;
+            float distance = std::abs(enemy.pos.x - player.pos.x);
+            if (distance < nearestDistance) {
+                nearestDistance = distance;
+                target = &player;
+            }
+        }
+        if (!target) continue;
+
+        enemy.attackCooldown -= deltaTime;
+        if (enemy.attackCooldown > 0.0f) continue;
+        if (enemy.type == EnemyType::HardMelee) {
+            if (nearestDistance <= contactDistance(*target, enemy)) {
+                target->health -= GameplayTuning::HARD_ENEMY_DAMAGE;
+                if (target->health <= 0) target->alive = false;
+                enemy.attackCooldown = enemyAttackInterval(enemy.type);
+            }
+        } else {
+            bool lowerAttack = enemy.type == EnemyType::MediumLowerRanged;
+            float heightOffset = lowerAttack ? -0.12f : 0.12f;
+            enemyProjectiles.push_back({
+                glm::vec2(enemy.pos.x - 0.04f, LANE_Y[enemy.lane] + heightOffset),
+                enemy.lane, enemyProjectileSpeed(enemy.type),
+                lowerAttack ? GameplayTuning::MEDIUM_ENEMY_DAMAGE : GameplayTuning::EASY_ENEMY_DAMAGE,
+                lowerAttack ? EnemyProjectileHeight::Lower : EnemyProjectileHeight::Upper,
+                true
+            });
+            enemy.attackCooldown = enemyAttackInterval(enemy.type);
+        }
     }
+
+    for (EnemyProjectile& projectile : enemyProjectiles) {
+        if (!projectile.alive) continue;
+        float previousX = projectile.pos.x;
+        projectile.pos.x -= pixelsPerSecondToNdc(projectile.speedPixelsPerSecond) * deltaTime;
+        for (Player& player : players) {
+            if (!player.alive || player.lane != projectile.lane) continue;
+            bool avoided = projectile.height == EnemyProjectileHeight::Upper
+                ? player.ducking
+                : player.jumpTimer > 0.0f;
+            float collisionDistance = 0.5f * playerBodyWidth(player.type);
+            bool crossedPlayer = previousX >= player.pos.x - collisionDistance &&
+                projectile.pos.x <= player.pos.x + collisionDistance;
+            if (crossedPlayer && !avoided) {
+                player.health -= projectile.damage;
+                if (player.health <= 0) player.alive = false;
+                projectile.alive = false;
+                break;
+            }
+        }
+        if (projectile.pos.x < -1.1f) projectile.alive = false;
+    }
+    enemyProjectiles.erase(
+        std::remove_if(enemyProjectiles.begin(), enemyProjectiles.end(),
+                       [](const EnemyProjectile& projectile) { return !projectile.alive; }),
+        enemyProjectiles.end());
 
     for (Player& player : players) {
         if (!player.alive || player.type != PlayerType::Melee || player.engagedEnemy >= 0) continue;
@@ -645,6 +733,13 @@ void renderScene() {
                 drawHealthBar(enemy.pos.x, enemyY + 0.205f, enemy.health,
                               maximumHealth(enemy.type), glm::vec3(0.88f, 0.18f, 0.12f));
             }
+        }
+        for (const EnemyProjectile& projectile : enemyProjectiles) {
+            glm::vec3 projectileColor = projectile.height == EnemyProjectileHeight::Upper
+                ? glm::vec3(0.95f, 0.35f, 0.12f)
+                : glm::vec3(0.95f, 0.78f, 0.20f);
+            drawShape(circleShape, projectile.pos.x, projectile.pos.y,
+                      0.035f, 0.035f, projectileColor);
         }
     }
 
