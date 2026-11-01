@@ -23,11 +23,15 @@ constexpr int WINDOW_H = 700;
 constexpr int LANE_COUNT = 3;
 constexpr float LANE_HEIGHT = 0.32f;
 constexpr float LANE_Y[LANE_COUNT] = {-0.125f, -0.48f, -0.835f};
+constexpr float PLAYER_CARD_X[3] = {-0.38f, 0.08f, 0.54f};
+constexpr float PLAYER_CARD_Y = 0.90f;
+constexpr float PLAYER_CARD_HALF_WIDTH = 0.21f;
+constexpr float PLAYER_CARD_HALF_HEIGHT = 0.09f;
 
 namespace GameplayTuning {
-constexpr float EASY_ENEMY_SPEED_PIXELS_PER_SECOND = 45.0f;
-constexpr float MEDIUM_ENEMY_SPEED_PIXELS_PER_SECOND = 55.0f;
-constexpr float HARD_ENEMY_SPEED_PIXELS_PER_SECOND = 35.0f;
+constexpr float EASY_ENEMY_SPEED_PIXELS_PER_SECOND = 30.0f;
+constexpr float MEDIUM_ENEMY_SPEED_PIXELS_PER_SECOND = 35.0f;
+constexpr float HARD_ENEMY_SPEED_PIXELS_PER_SECOND = 25.0f;
 constexpr float MELEE_PLAYER_SPEED_PIXELS_PER_SECOND = 45.0f;
 constexpr float LONG_RANGE_PLAYER_SPEED_PIXELS_PER_SECOND = 45.0f;
 constexpr float DEFENSE_PLAYER_SPEED_PIXELS_PER_SECOND = 0.0f;
@@ -53,6 +57,7 @@ constexpr float JUMP_DURATION = 0.55f;
 constexpr float MELEE_ATTACK_ANIMATION_DURATION = 0.20f;
 constexpr float MELEE_WEAPON_REACH_NDC = 0.08f;
 constexpr float HOME_BASE_X = -0.78f;
+constexpr float PLAYER_START_X = -0.66f;
 constexpr float PLAYER_RIGHT_LIMIT = 0.80f;
 constexpr float MELEE_BODY_WIDTH_NDC = 0.075f;
 constexpr float DEFENSE_BODY_WIDTH_NDC = 0.14f;
@@ -120,24 +125,42 @@ struct PlayerProjectile {
     int damage;
     bool alive;
 };
+struct Collectible {
+    glm::vec2 pos;
+    int lane;
+    int value;
+    bool alive;
+};
 
 GLuint shaderProgram = 0;
 GLint transformLocation = -1;
 GLint damageTintLocation = -1;
 float currentDamageTint = 0.0f;
+float playerDrawingScale = 1.0f;
+bool grayscaleDrawing = false;
 Shape rectangleShape, triangleShape, circleShape;
-bool selectedLanes[LANE_COUNT] = {false, true, false};
+bool selectedLanes[LANE_COUNT] = {false, false, false};
 int hoveredLane = -1;
 std::vector<Player> players{
-    {PlayerType::Melee, glm::vec2(-0.62f, LANE_Y[1]), 1, 5, true,
-     GameplayTuning::MELEE_PLAYER_SPEED_PIXELS_PER_SECOND, 0.0f, false, 0.0f, 0.0f, -1}
 };
 bool duckKeyHeld = false;
 std::vector<Enemy> enemies;
 std::vector<EnemyProjectile> enemyProjectiles;
 std::vector<PlayerProjectile> playerProjectiles;
+std::vector<Collectible> collectibles;
 float enemySpawnTimer = 0.0f;
-int coins = 0;
+constexpr int STARTING_COINS = 30;
+constexpr int ENEMY_COIN_REWARD = 10;
+constexpr int MELEE_PLAYER_COST = 10;
+constexpr int LONG_RANGE_PLAYER_COST = 20;
+constexpr int DEFENSE_PLAYER_COST = 30;
+constexpr int MELEE_UNLOCK_THRESHOLD = 10;
+constexpr int LONG_RANGE_UNLOCK_THRESHOLD = 20;
+constexpr int DEFENSE_UNLOCK_THRESHOLD = 30;
+int coins = STARTING_COINS;
+int coinsEarnedSinceStart = 0;
+int placementLane = -1;
+int hoveredPlayerCard = -1;
 bool paused = false;
 bool gameOver = false;
 float lastFrameTime = 0.0f;
@@ -221,6 +244,10 @@ void createGeometry() {
 
 void drawShape(const Shape& shape, float x, float y, float sx, float sy, glm::vec3 color,
                float rotation = 0.0f) {
+    if (grayscaleDrawing) {
+        float gray = glm::dot(color, glm::vec3(0.299f, 0.587f, 0.114f));
+        color = glm::vec3(gray);
+    }
     glm::mat4 model(1.0f);
     model = glm::translate(model, glm::vec3(x, y, 0.0f));
     model = glm::rotate(model, rotation, glm::vec3(0,0,1));
@@ -256,6 +283,59 @@ int laneFromY(float y) {
 void cursorPositionCallback(GLFWwindow*, double x, double y) {
     glm::vec2 p = cursorToNdc(x, y);
     hoveredLane = laneFromY(p.y);
+    hoveredPlayerCard = -1;
+    for (int card = 0; card < 3; ++card) {
+        if (std::abs(p.x - PLAYER_CARD_X[card]) <= PLAYER_CARD_HALF_WIDTH &&
+            std::abs(p.y - PLAYER_CARD_Y) <= PLAYER_CARD_HALF_HEIGHT) {
+            if ((card == 0 && coins >= MELEE_PLAYER_COST) ||
+                (card == 1 && coinsEarnedSinceStart >= LONG_RANGE_UNLOCK_THRESHOLD && coins >= LONG_RANGE_PLAYER_COST) ||
+                (card == 2 && coinsEarnedSinceStart >= DEFENSE_UNLOCK_THRESHOLD && coins >= DEFENSE_PLAYER_COST)) {
+                hoveredPlayerCard = card;
+            }
+            break;
+        }
+    }
+}
+
+PlayerType playerTypeForCard(int card) {
+    if (card == 1) return PlayerType::LongRange;
+    if (card == 2) return PlayerType::Defense;
+    return PlayerType::Melee;
+}
+
+int playerCostForCard(int card) {
+    if (card == 1) return LONG_RANGE_PLAYER_COST;
+    if (card == 2) return DEFENSE_PLAYER_COST;
+    return MELEE_PLAYER_COST;
+}
+
+bool playerCardIsUnlocked(int card) {
+    if (card == 0) return coins >= MELEE_UNLOCK_THRESHOLD;
+    if (card == 1)
+        return coinsEarnedSinceStart >= LONG_RANGE_UNLOCK_THRESHOLD &&
+               coins >= LONG_RANGE_UNLOCK_THRESHOLD;
+    if (card == 2)
+        return coinsEarnedSinceStart >= DEFENSE_UNLOCK_THRESHOLD &&
+               coins >= DEFENSE_UNLOCK_THRESHOLD;
+    return false;
+}
+
+void purchaseAndPlacePlayer(int card, int lane) {
+    if (!playerCardIsUnlocked(card) || lane < 0 || lane >= LANE_COUNT) return;
+    int cost = playerCostForCard(card);
+    if (coins < cost) return;
+
+    PlayerType type = playerTypeForCard(card);
+    float speed = GameplayTuning::MELEE_PLAYER_SPEED_PIXELS_PER_SECOND;
+    int health = 5;
+    if (type == PlayerType::LongRange) speed = GameplayTuning::LONG_RANGE_PLAYER_SPEED_PIXELS_PER_SECOND;
+    if (type == PlayerType::Defense) {
+        speed = GameplayTuning::DEFENSE_PLAYER_SPEED_PIXELS_PER_SECOND;
+        health = 7;
+    }
+    players.push_back({type, glm::vec2(GameplayTuning::PLAYER_START_X, LANE_Y[lane]), lane,
+                       health, true, speed, 0.0f, false, 0.0f, 0.0f, -1});
+    coins -= cost;
 }
 
 void spawnEnemy() {
@@ -264,22 +344,29 @@ void spawnEnemy() {
                        lane, GameplayTuning::EASY_ENEMY_SPEED_PIXELS_PER_SECOND, 5, true, false, 0.0f});
 }
 
+void defeatEnemy(Enemy& enemy) {
+    if (!enemy.alive) return;
+    enemy.alive = false;
+    enemy.engaged = false;
+    collectibles.push_back({enemy.pos, enemy.lane, ENEMY_COIN_REWARD, true});
+}
+
 void resetEnemies() {
     enemies.clear();
     enemyProjectiles.clear();
     playerProjectiles.clear();
+    collectibles.clear();
     enemySpawnTimer = 0.0f;
     spawnEnemy();
 }
 
 void resetPlayers() {
     players.clear();
-    players.push_back({PlayerType::Melee, glm::vec2(-0.62f, LANE_Y[1]), 1, 5, true,
-                       GameplayTuning::MELEE_PLAYER_SPEED_PIXELS_PER_SECOND,
-                       0.0f, false, 0.0f, 0.0f, -1});
     selectedLanes[0] = false;
-    selectedLanes[1] = true;
+    selectedLanes[1] = false;
     selectedLanes[2] = false;
+    placementLane = -1;
+    coinsEarnedSinceStart = 0;
     duckKeyHeld = false;
 }
 
@@ -288,8 +375,26 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int) {
     double x, y;
     glfwGetCursorPos(window, &x, &y);
     glm::vec2 p = cursorToNdc(x, y);
+    for (int card = 0; card < 3; ++card) {
+        if (std::abs(p.x - PLAYER_CARD_X[card]) <= PLAYER_CARD_HALF_WIDTH &&
+            std::abs(p.y - PLAYER_CARD_Y) <= PLAYER_CARD_HALF_HEIGHT) {
+            if (playerCardIsUnlocked(card) && placementLane >= 0 && selectedLanes[placementLane])
+                purchaseAndPlacePlayer(card, placementLane);
+            return;
+        }
+    }
     int lane = laneFromY(p.y);
-    if (lane >= 0) selectedLanes[lane] = !selectedLanes[lane];
+    if (lane >= 0) {
+        selectedLanes[lane] = !selectedLanes[lane];
+        if (selectedLanes[lane]) {
+            placementLane = lane;
+        } else if (placementLane == lane) {
+            placementLane = -1;
+            for (int i = 0; i < LANE_COUNT; ++i) {
+                if (selectedLanes[i]) placementLane = i;
+            }
+        }
+    }
 }
 
 void keyCallback(GLFWwindow* window, int key, int, int action, int) {
@@ -303,7 +408,7 @@ void keyCallback(GLFWwindow* window, int key, int, int action, int) {
     if (key == GLFW_KEY_R) {
         resetPlayers();
         resetEnemies();
-        coins = 0; gameOver = false; paused = false;
+        coins = STARTING_COINS; gameOver = false; paused = false;
     }
     if (key == GLFW_KEY_UP || key == GLFW_KEY_W) {
         for (Player& player : players) {
@@ -317,7 +422,7 @@ void keyCallback(GLFWwindow* window, int key, int, int action, int) {
     if (key == GLFW_KEY_SPACE && gameOver) {
         resetPlayers();
         resetEnemies();
-        coins = 0; gameOver = false;
+        coins = STARTING_COINS; gameOver = false;
     }
     (void)window;
 }
@@ -412,13 +517,17 @@ void drawPlayerPart(const Shape& shape, float x, float y, float offsetX, float o
                     float jumpOffset, bool ducking) {
     const float heightScale = ducking ? 0.65f : 1.0f;
     const float poseOffset = jumpOffset - (ducking ? 0.025f : 0.0f);
-    drawShape(shape, x + offsetX, y + poseOffset + offsetY * heightScale,
-              sx, sy * heightScale, color, rotation);
+    drawShape(shape, x + offsetX * playerDrawingScale,
+              y + (poseOffset + offsetY * heightScale) * playerDrawingScale,
+              sx * playerDrawingScale, sy * heightScale * playerDrawingScale,
+              color, rotation);
 }
 
 void drawPlayerCharacter(float x, float y, PlayerType playerType,
                          int health, float jumpOffset = 0.0f, bool ducking = false,
-                         bool meleeAttacking = false) {
+                         bool meleeAttacking = false, float scale = 1.0f) {
+    float previousScale = playerDrawingScale;
+    playerDrawingScale = scale;
     currentDamageTint = damageTintForHealth(health, maximumHealth(playerType));
     const glm::vec3 skin(0.82f,0.60f,0.40f);
     const glm::vec3 darkCloth(0.22f, 0.18f, 0.15f);
@@ -480,6 +589,7 @@ void drawPlayerCharacter(float x, float y, PlayerType playerType,
         break;
     }
     currentDamageTint = 0.0f;
+    playerDrawingScale = previousScale;
 }
 
 float playerBodyWidth(PlayerType type) {
@@ -673,8 +783,7 @@ void updateCombat(float deltaTime) {
             player.attackCooldown = GameplayTuning::MELEE_PLAYER_ATTACK_INTERVAL;
             player.attackAnimationTimer = GameplayTuning::MELEE_ATTACK_ANIMATION_DURATION;
             if (enemy.health <= 0) {
-                enemy.alive = false;
-                enemy.engaged = false;
+                defeatEnemy(enemy);
                 player.engagedEnemy = -1;
                 player.attackCooldown = 0.0f;
             }
@@ -722,8 +831,7 @@ void updateCombat(float deltaTime) {
         if (firstHit) {
             firstHit->health -= projectile.damage;
             if (firstHit->health <= 0) {
-                firstHit->alive = false;
-                firstHit->engaged = false;
+                defeatEnemy(*firstHit);
                 for (Player& player : players) {
                     if (player.engagedEnemy >= 0 && player.engagedEnemy < static_cast<int>(enemies.size()) &&
                         &enemies[player.engagedEnemy] == firstHit) {
@@ -740,6 +848,88 @@ void updateCombat(float deltaTime) {
         std::remove_if(playerProjectiles.begin(), playerProjectiles.end(),
                        [](const PlayerProjectile& projectile) { return !projectile.alive; }),
         playerProjectiles.end());
+
+    for (Collectible& collectible : collectibles) {
+        if (!collectible.alive) continue;
+        for (const Player& player : players) {
+            if (!player.alive || player.lane != collectible.lane) continue;
+            float collisionDistance = 0.5f * playerBodyWidth(player.type) + 0.04f;
+            if (std::abs(player.pos.x - collectible.pos.x) <= collisionDistance) {
+                coins += collectible.value;
+                coinsEarnedSinceStart += collectible.value;
+                collectible.alive = false;
+                break;
+            }
+        }
+    }
+    collectibles.erase(
+        std::remove_if(collectibles.begin(), collectibles.end(),
+                       [](const Collectible& collectible) { return !collectible.alive; }),
+        collectibles.end());
+}
+
+void drawDigit(int digit, float centerX, float centerY) {
+    static const bool segments[10][7] = {
+        {true, true, true, true, true, true, false},
+        {false, true, true, false, false, false, false},
+        {true, true, false, true, true, false, true},
+        {true, true, true, true, false, false, true},
+        {false, true, true, false, false, true, true},
+        {true, false, true, true, false, true, true},
+        {true, false, true, true, true, true, true},
+        {true, true, true, false, false, false, false},
+        {true, true, true, true, true, true, true},
+        {true, true, true, true, false, true, true}
+    };
+    if (digit < 0 || digit > 9) return;
+    const glm::vec3 color(1.0f, 0.86f, 0.35f);
+    const float horizontalWidth = 0.035f;
+    const float horizontalHeight = 0.009f;
+    const float verticalWidth = 0.009f;
+    const float verticalHeight = 0.025f;
+    const float topY = centerY + 0.030f;
+    const float middleY = centerY;
+    const float bottomY = centerY - 0.030f;
+    const float leftX = centerX - 0.018f;
+    const float rightX = centerX + 0.018f;
+    const float segmentX[7] = {centerX, rightX, rightX, centerX, leftX, leftX, centerX};
+    const float segmentY[7] = {topY, centerY + 0.015f, centerY - 0.015f,
+                               bottomY, centerY - 0.015f, centerY + 0.015f, middleY};
+    for (int segment = 0; segment < 7; ++segment) {
+        if (!segments[digit][segment]) continue;
+        bool horizontal = segment == 0 || segment == 3 || segment == 6;
+        drawShape(rectangleShape, segmentX[segment], segmentY[segment],
+                  horizontal ? horizontalWidth : verticalWidth,
+                  horizontal ? horizontalHeight : verticalHeight, color);
+    }
+}
+
+void drawCoinCount() {
+    drawShape(circleShape, -0.84f, PLAYER_CARD_Y, 0.035f, 0.035f, glm::vec3(1.0f, 0.78f, 0.10f));
+    drawShape(circleShape, -0.84f, PLAYER_CARD_Y, 0.020f, 0.020f, glm::vec3(0.90f, 0.52f, 0.05f));
+    std::string digits = std::to_string(std::max(0, coins));
+    if (digits.size() > 3) digits = digits.substr(digits.size() - 3);
+    float startX = -0.76f + 0.065f * static_cast<float>(3 - digits.size());
+    for (char digit : digits) {
+        drawDigit(digit - '0', startX, PLAYER_CARD_Y);
+        startX += 0.065f;
+    }
+}
+
+void drawPlayerCard(int card, float centerX) {
+    bool unlocked = playerCardIsUnlocked(card);
+    float scale = hoveredPlayerCard == card ? 0.52f : 0.48f;
+    grayscaleDrawing = !unlocked;
+    drawPlayerCharacter(centerX - 0.04f, PLAYER_CARD_Y, playerTypeForCard(card),
+                        maximumHealth(playerTypeForCard(card)), 0.0f, false, false, scale);
+    int cost = playerCostForCard(card);
+    drawDigit(cost / 10, centerX + 0.12f, PLAYER_CARD_Y);
+    drawDigit(cost % 10, centerX + 0.175f, PLAYER_CARD_Y);
+    grayscaleDrawing = false;
+}
+
+void drawPlayerCards() {
+    for (int card = 0; card < 3; ++card) drawPlayerCard(card, PLAYER_CARD_X[card]);
 }
 
 void drawPalmTree(float x, float groundY) {
@@ -834,16 +1024,18 @@ void renderScene() {
         }
     }
 
-    // A coin-like collectible. (Press C to collect the demo coin.)
-    drawShape(circleShape, 0.32f, -0.43f, 0.035f, 0.035f, glm::vec3(1.0f,0.78f,0.10f));
-    drawShape(circleShape, 0.32f, -0.43f, 0.020f, 0.020f, glm::vec3(0.90f,0.52f,0.05f));
+    for (const Collectible& collectible : collectibles) {
+        if (!collectible.alive) continue;
+        drawShape(circleShape, collectible.pos.x, LANE_Y[collectible.lane],
+                  0.035f, 0.035f, glm::vec3(1.0f, 0.78f, 0.10f));
+        drawShape(circleShape, collectible.pos.x, LANE_Y[collectible.lane],
+                  0.020f, 0.020f, glm::vec3(0.90f, 0.52f, 0.05f));
+    }
 
-    // Minimal UI bars (text rendering is intentionally left for a later step).
-    drawShape(rectangleShape, 0.0f,0.93f, 1.90f,0.10f, glm::vec3(0.12f,0.13f,0.15f));
-    drawShape(rectangleShape, -0.65f,0.93f, 0.22f,0.045f, glm::vec3(0.80f,0.20f,0.15f));
-    drawShape(rectangleShape, -0.25f,0.93f, 0.22f,0.045f, glm::vec3(0.20f,0.72f,0.30f));
-    drawShape(rectangleShape, 0.22f,0.93f, 0.22f,0.045f, glm::vec3(0.95f,0.74f,0.15f));
-    drawShape(rectangleShape, 0.68f,0.93f, 0.22f,0.045f, glm::vec3(0.30f,0.62f,0.92f));
+    // Currency and player cards use the same geometric shapes as the scene.
+    drawShape(rectangleShape, 0.0f,PLAYER_CARD_Y, 1.90f,0.20f, glm::vec3(0.12f,0.13f,0.15f));
+    drawPlayerCards();
+    drawCoinCount();
 
     if (paused || gameOver) {
         drawShape(rectangleShape, 0,0, 0.90f,0.44f, glm::vec3(0.10f,0.11f,0.13f));
@@ -897,7 +1089,6 @@ int main() {
         lastFrameTime = now;
         if (!paused && !gameOver) {
             updateCombat(deltaTime);
-            if (glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS) coins = 1;
         }
 
         glClearColor(0.08f,0.09f,0.12f,1.0f);
