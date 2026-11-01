@@ -18,6 +18,8 @@
 constexpr int WINDOW_W = 1100;
 constexpr int WINDOW_H = 700;
 constexpr int LANE_COUNT = 3;
+constexpr float LANE_HEIGHT = 0.32f;
+constexpr float LANE_Y[LANE_COUNT] = {-0.125f, -0.48f, -0.835f};
 
 const char* vertexShaderSource = R"(
 #version 330 core
@@ -160,10 +162,11 @@ glm::vec2 cursorToNdc(double x, double y) {
 }
 
 int laneFromY(float y) {
-    // Lane centers: +0.43, 0.0, -0.43. Each lane occupies roughly 0.34 NDC units.
-    if (y > 0.25f && y < 0.62f) return 0;
-    if (y > -0.18f && y <= 0.25f) return 1;
-    if (y > -0.62f && y <= -0.18f) return 2;
+    for (int i = 0; i < LANE_COUNT; ++i) {
+        float laneTop = LANE_Y[i] + LANE_HEIGHT * 0.5f;
+        float laneBottom = LANE_Y[i] - LANE_HEIGHT * 0.5f;
+        if (y >= laneBottom && y <= laneTop) return i;
+    }
     return -1;
 }
 
@@ -214,6 +217,30 @@ void drawCharacter(float x, float y, bool enemy) {
     }
 }
 
+void drawPalmTree(float x, float groundY) {
+    const glm::vec3 leafColor(0.16f, 0.42f, 0.19f);
+    const float trunkHeight = 0.34f;
+    const float trunkCenterY = groundY + trunkHeight * 0.5f;
+    drawShape(rectangleShape, x, trunkCenterY, 0.045f, trunkHeight,
+              glm::vec3(0.48f, 0.31f, 0.16f), -0.12f);
+    const float crownY = groundY + trunkHeight;
+    drawShape(triangleShape, x - 0.10f, crownY + 0.02f, 0.18f, 0.10f, leafColor, -1.10f);
+    drawShape(triangleShape, x - 0.04f, crownY + 0.09f, 0.18f, 0.10f, leafColor, -0.55f);
+    drawShape(triangleShape, x + 0.04f, crownY + 0.09f, 0.18f, 0.10f, leafColor, 0.55f);
+    drawShape(triangleShape, x + 0.10f, crownY + 0.02f, 0.18f, 0.10f, leafColor, 1.10f);
+}
+
+void drawTorch(float x, float y) {
+    drawShape(rectangleShape, x, y - 0.045f, 0.035f, 0.16f,
+              glm::vec3(0.35f, 0.20f, 0.11f));
+    drawShape(rectangleShape, x, y + 0.035f, 0.055f, 0.025f,
+              glm::vec3(0.70f, 0.48f, 0.22f));
+    drawShape(triangleShape, x, y + 0.09f, 0.055f, 0.09f,
+              glm::vec3(1.0f, 0.42f, 0.08f));
+    drawShape(triangleShape, x, y + 0.08f, 0.025f, 0.055f,
+              glm::vec3(1.0f, 0.82f, 0.20f));
+}
+
 void renderScene() {
     glUseProgram(shaderProgram);
     // Sky and distant hills.
@@ -230,20 +257,24 @@ void renderScene() {
         drawShape(rectangleShape, -0.94f + i * 0.06f,-0.09f, 0.025f,0.48f, glm::vec3(0.56f,0.46f,0.34f));
     drawShape(rectangleShape, -0.88f,-0.36f, 0.28f,0.06f, glm::vec3(0.51f,0.39f,0.26f));
 
+    // Place the palm at the sand line, just left of the right-side torch.
+    drawPalmTree(0.80f, 0.045f);
+    drawTorch(0.92f, 0.18f);
+    drawTorch(0.92f, -0.73f);
+
     // Three lanes and separators. Hovered lane is lighter; selected lane has a green marker.
-    const float laneY[3] = {0.43f, 0.00f, -0.43f};
     for (int i = 0; i < 3; ++i) {
         glm::vec3 laneColor = (i == hoveredLane) ? glm::vec3(0.90f,0.77f,0.52f) : glm::vec3(0.73f,0.57f,0.34f);
-        drawShape(rectangleShape, 0.10f, laneY[i], 1.48f, 0.32f, laneColor);
-        drawShape(rectangleShape, 0.10f, laneY[i] - 0.17f, 1.48f, 0.012f, glm::vec3(0.48f,0.37f,0.24f));
+        drawShape(rectangleShape, 0.10f, LANE_Y[i], 1.48f, LANE_HEIGHT, laneColor);
+        drawShape(rectangleShape, 0.10f, LANE_Y[i] - 0.17f, 1.48f, 0.012f, glm::vec3(0.48f,0.37f,0.24f));
         if (i == selectedLane)
-            drawShape(triangleShape, -0.68f, laneY[i], 0.045f, 0.07f, glm::vec3(0.20f,0.75f,0.28f));
+            drawShape(triangleShape, -0.68f, LANE_Y[i], 0.045f, 0.07f, glm::vec3(0.20f,0.75f,0.28f));
     }
 
     // Placeholder player and enemy on the selected lane.
-    playerY = laneY[selectedLane];
+    playerY = LANE_Y[selectedLane];
     drawCharacter(playerX, playerY, false);
-    if (!gameOver) drawCharacter(enemyX, laneY[1], true);
+    if (!gameOver) drawCharacter(enemyX, LANE_Y[1], true);
 
     // A coin-like collectible. (Press C to collect the demo coin.)
     drawShape(circleShape, 0.32f, -0.43f, 0.035f, 0.035f, glm::vec3(1.0f,0.78f,0.10f));
