@@ -5,12 +5,15 @@
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
+#include "Enemy.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
+#include <ctime>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -21,6 +24,7 @@ constexpr int LANE_COUNT = 3;
 constexpr float LANE_HEIGHT = 0.32f;
 constexpr float LANE_Y[LANE_COUNT] = {-0.125f, -0.48f, -0.835f};
 constexpr float JUMP_DURATION = 0.55f;
+constexpr float ENEMY_SPAWN_INTERVAL = 3.0f;
 
 const char* vertexShaderSource = R"(
 #version 330 core
@@ -39,12 +43,16 @@ const char* fragmentShaderSource = R"(
 in vec3 vColor;
 out vec4 FragColor;
 uniform vec3 u_Tint;
-void main() { FragColor = vec4(vColor * u_Tint, 1.0); }
+uniform float u_DamageTint;
+void main() {
+    vec3 baseColor = vColor * u_Tint;
+    vec3 damageColor = mix(baseColor, vec3(0.95, 0.05, 0.04), u_DamageTint);
+    FragColor = vec4(damageColor, 1.0);
+}
 )";
 
 struct Vertex { float x, y, r, g, b; };
 struct Shape { GLuint vao = 0, vbo = 0; GLsizei count = 0; GLenum mode = GL_TRIANGLES; };
-struct Enemy { glm::vec2 pos; int lane; float speed; int hp; bool alive; };
 enum class PlayerType { Melee, Defense, LongRange };
 struct Player {
     PlayerType type;
@@ -58,6 +66,8 @@ struct Player {
 
 GLuint shaderProgram = 0;
 GLint transformLocation = -1;
+GLint damageTintLocation = -1;
+float currentDamageTint = 0.0f;
 Shape rectangleShape, triangleShape, circleShape;
 bool selectedLanes[LANE_COUNT] = {false, true, false};
 int hoveredLane = -1;
@@ -65,13 +75,12 @@ std::vector<Player> players{
     {PlayerType::Melee, glm::vec2(-0.62f, LANE_Y[1]), 1, 5, true, 0.0f, false}
 };
 bool duckKeyHeld = false;
-float enemyX = 0.72f;
-float enemySpeed = 0.10f;
+std::vector<Enemy> enemies;
+float enemySpawnTimer = 0.0f;
 int coins = 0;
 bool paused = false;
 bool gameOver = false;
 float lastFrameTime = 0.0f;
-std::vector<Enemy> enemies;
 
 GLuint compileShader(GLenum type, const char* source) {
     GLuint shader = glCreateShader(type);
@@ -163,6 +172,7 @@ void drawShape(const Shape& shape, float x, float y, float sx, float sy, glm::ve
     // geometry uses white vertices and a fragment tint uniform below.
     GLint tint = glGetUniformLocation(shaderProgram, "u_Tint");
     if (tint >= 0) glUniform3fv(tint, 1, &color[0]);
+    if (damageTintLocation >= 0) glUniform1f(damageTintLocation, currentDamageTint);
     glBindVertexArray(shape.vao);
     glDrawArrays(shape.mode, 0, shape.count);
     glBindVertexArray(0);
@@ -186,6 +196,18 @@ int laneFromY(float y) {
 void cursorPositionCallback(GLFWwindow*, double x, double y) {
     glm::vec2 p = cursorToNdc(x, y);
     hoveredLane = laneFromY(p.y);
+}
+
+void spawnEnemy() {
+    int lane = std::rand() % LANE_COUNT;
+    enemies.push_back({EnemyType::EasyUpperRanged, glm::vec2(0.90f, LANE_Y[lane]),
+                       lane, 0.10f, 5, true});
+}
+
+void resetEnemies() {
+    enemies.clear();
+    enemySpawnTimer = 0.0f;
+    spawnEnemy();
 }
 
 void resetPlayers() {
@@ -216,7 +238,8 @@ void keyCallback(GLFWwindow* window, int key, int, int action, int) {
     if (key == GLFW_KEY_ESCAPE) paused = !paused;
     if (key == GLFW_KEY_R) {
         resetPlayers();
-        enemyX = 0.72f; coins = 0; gameOver = false; paused = false;
+        resetEnemies();
+        coins = 0; gameOver = false; paused = false;
     }
     if (key == GLFW_KEY_UP || key == GLFW_KEY_W) {
         for (Player& player : players) {
@@ -229,9 +252,95 @@ void keyCallback(GLFWwindow* window, int key, int, int action, int) {
     }
     if (key == GLFW_KEY_SPACE && gameOver) {
         resetPlayers();
-        enemyX = 0.72f; coins = 0; gameOver = false;
+        resetEnemies();
+        coins = 0; gameOver = false;
     }
     (void)window;
+}
+
+int maximumHealth(EnemyType type) {
+    return type == EnemyType::HardMelee ? 7 : 5;
+}
+
+int maximumHealth(PlayerType type) {
+    return type == PlayerType::Defense ? 7 : 5;
+}
+
+float damageTintForHealth(int health, int maxHealth) {
+    float healthRatio = static_cast<float>(health) / static_cast<float>(maxHealth);
+    healthRatio = std::clamp(healthRatio, 0.0f, 1.0f);
+    return 0.75f * (1.0f - healthRatio);
+}
+
+void drawHealthBar(float x, float y, int health, int maxHealth, glm::vec3 fillColor) {
+    constexpr float segmentWidth = 0.018f;
+    constexpr float segmentGap = 0.004f;
+    constexpr float barHeight = 0.022f;
+    const float totalWidth = maxHealth * segmentWidth + (maxHealth - 1) * segmentGap;
+    const float firstCenter = x - totalWidth * 0.5f + segmentWidth * 0.5f;
+
+    for (int i = 0; i < maxHealth; ++i) {
+        float segmentX = firstCenter + i * (segmentWidth + segmentGap);
+        drawShape(rectangleShape, segmentX, y, segmentWidth, barHeight,
+                  glm::vec3(0.16f, 0.12f, 0.10f));
+        if (i < health) {
+            drawShape(rectangleShape, segmentX, y, segmentWidth * 0.72f, barHeight * 0.62f,
+                      fillColor);
+        }
+    }
+}
+
+void drawEnemyCharacter(float x, float y, EnemyType type, int health) {
+    currentDamageTint = damageTintForHealth(health, maximumHealth(type));
+    const glm::vec3 skin(0.66f, 0.40f, 0.24f);
+    const glm::vec3 darkCloth(0.20f, 0.12f, 0.11f);
+
+    switch (type) {
+    case EnemyType::EasyUpperRanged:
+        // Slim hooded thief with a raised sling for attacks from above.
+        drawShape(rectangleShape, x, y - 0.075f, 0.075f, 0.15f, glm::vec3(0.40f,0.18f,0.14f));
+        drawShape(circleShape, x, y + 0.055f, 0.05f, 0.05f, skin);
+        drawShape(triangleShape, x, y + 0.085f, 0.12f, 0.10f, darkCloth);
+        drawShape(rectangleShape, x, y + 0.035f, 0.07f, 0.018f, glm::vec3(0.14f,0.10f,0.09f));
+        drawShape(rectangleShape, x - 0.025f, y - 0.17f, 0.025f, 0.10f, darkCloth);
+        drawShape(rectangleShape, x + 0.025f, y - 0.17f, 0.025f, 0.10f, darkCloth);
+        drawShape(rectangleShape, x - 0.075f, y + 0.12f, 0.10f, 0.016f,
+                  glm::vec3(0.48f,0.30f,0.15f), 0.45f);
+        drawShape(circleShape, x - 0.13f, y + 0.17f, 0.028f, 0.028f,
+                  glm::vec3(0.28f,0.27f,0.23f));
+        break;
+
+    case EnemyType::MediumLowerRanged:
+        // A low, wide crouch with a ground-level crossbow.
+        drawShape(rectangleShape, x, y - 0.085f, 0.13f, 0.12f, glm::vec3(0.34f,0.25f,0.18f));
+        drawShape(circleShape, x, y + 0.025f, 0.045f, 0.045f, skin);
+        drawShape(rectangleShape, x, y + 0.025f, 0.09f, 0.022f, darkCloth);
+        drawShape(rectangleShape, x - 0.04f, y - 0.16f, 0.05f, 0.07f, darkCloth, -0.3f);
+        drawShape(rectangleShape, x + 0.04f, y - 0.16f, 0.05f, 0.07f, darkCloth, 0.3f);
+        drawShape(rectangleShape, x - 0.09f, y - 0.10f, 0.12f, 0.025f,
+                  glm::vec3(0.42f,0.27f,0.12f));
+        drawShape(triangleShape, x - 0.15f, y - 0.10f, 0.05f, 0.05f,
+                  glm::vec3(0.58f,0.54f,0.45f), -1.57f);
+        break;
+
+    case EnemyType::HardMelee:
+        // Broad armored body, horned helmet, and a heavy close-range weapon.
+        drawShape(rectangleShape, x, y - 0.075f, 0.14f, 0.18f, glm::vec3(0.30f,0.22f,0.17f));
+        drawShape(circleShape, x, y + 0.065f, 0.055f, 0.055f, skin);
+        drawShape(rectangleShape, x, y + 0.105f, 0.13f, 0.035f, glm::vec3(0.24f,0.23f,0.20f));
+        drawShape(triangleShape, x - 0.075f, y + 0.11f, 0.055f, 0.085f,
+                  glm::vec3(0.24f,0.23f,0.20f), -0.35f);
+        drawShape(triangleShape, x + 0.075f, y + 0.11f, 0.055f, 0.085f,
+                  glm::vec3(0.24f,0.23f,0.20f), 0.35f);
+        drawShape(rectangleShape, x - 0.04f, y - 0.17f, 0.04f, 0.10f, darkCloth);
+        drawShape(rectangleShape, x + 0.04f, y - 0.17f, 0.04f, 0.10f, darkCloth);
+        drawShape(rectangleShape, x - 0.12f, y - 0.015f, 0.14f, 0.04f,
+                  glm::vec3(0.62f,0.61f,0.56f), -0.25f);
+        drawShape(rectangleShape, x - 0.055f, y - 0.005f, 0.04f, 0.055f,
+                  glm::vec3(0.34f,0.20f,0.11f), -0.25f);
+        break;
+    }
+    currentDamageTint = 0.0f;
 }
 
 void drawPlayerPart(const Shape& shape, float x, float y, float offsetX, float offsetY,
@@ -243,20 +352,10 @@ void drawPlayerPart(const Shape& shape, float x, float y, float offsetX, float o
               sx, sy * heightScale, color, rotation);
 }
 
-void drawCharacter(float x, float y, bool enemy, PlayerType playerType = PlayerType::Melee,
-                   float jumpOffset = 0.0f, bool ducking = false) {
-    const glm::vec3 skin = enemy ? glm::vec3(0.66f,0.40f,0.24f) : glm::vec3(0.82f,0.60f,0.40f);
-    if (enemy) {
-        // Keep the existing placeholder enemy drawing unchanged.
-        drawShape(rectangleShape, x, y - 0.08f, 0.09f, 0.18f, glm::vec3(0.35f,0.15f,0.12f));
-        drawShape(circleShape, x, y + 0.055f, 0.055f, 0.055f, skin);
-        drawShape(rectangleShape, x, y - 0.19f, 0.035f, 0.10f, glm::vec3(0.22f,0.18f,0.15f));
-        drawShape(rectangleShape, x - 0.075f, y - 0.02f, 0.07f, 0.025f,
-                  glm::vec3(0.25f,0.25f,0.25f));
-        drawShape(rectangleShape, x, y + 0.085f, 0.11f, 0.025f, glm::vec3(0.12f,0.10f,0.09f));
-        return;
-    }
-
+void drawPlayerCharacter(float x, float y, PlayerType playerType,
+                         int health, float jumpOffset = 0.0f, bool ducking = false) {
+    currentDamageTint = damageTintForHealth(health, maximumHealth(playerType));
+    const glm::vec3 skin(0.82f,0.60f,0.40f);
     const glm::vec3 darkCloth(0.22f, 0.18f, 0.15f);
     switch (playerType) {
     case PlayerType::Melee:
@@ -313,6 +412,7 @@ void drawCharacter(float x, float y, bool enemy, PlayerType playerType = PlayerT
                        glm::vec3(0.78f,0.70f,0.45f), 0, jumpOffset, ducking);
         break;
     }
+    currentDamageTint = 0.0f;
 }
 
 void drawPalmTree(float x, float groundY) {
@@ -379,10 +479,22 @@ void renderScene() {
         float jumpOffset = player.jumpTimer > 0.0f
             ? 0.20f * std::sin(jumpProgress * 3.14159265f)
             : 0.0f;
-        drawCharacter(player.pos.x, player.pos.y, false, player.type,
-                      jumpOffset, player.ducking);
+        drawPlayerCharacter(player.pos.x, player.pos.y, player.type, player.health,
+                            jumpOffset, player.ducking);
+        drawHealthBar(player.pos.x, player.pos.y + 0.155f + jumpOffset,
+                      player.health, maximumHealth(player.type),
+                      glm::vec3(0.22f, 0.76f, 0.24f));
     }
-    if (!gameOver) drawCharacter(enemyX, LANE_Y[1], true);
+    if (!gameOver) {
+        for (const Enemy& enemy : enemies) {
+            if (enemy.alive) {
+                float enemyY = LANE_Y[enemy.lane];
+                drawEnemyCharacter(enemy.pos.x, enemyY, enemy.type, enemy.health);
+                drawHealthBar(enemy.pos.x, enemyY + 0.205f, enemy.health,
+                              maximumHealth(enemy.type), glm::vec3(0.88f, 0.18f, 0.12f));
+            }
+        }
+    }
 
     // A coin-like collectible. (Press C to collect the demo coin.)
     drawShape(circleShape, 0.32f, -0.43f, 0.035f, 0.035f, glm::vec3(1.0f,0.78f,0.10f));
@@ -435,7 +547,10 @@ int main() {
 
     shaderProgram = createProgram();
     transformLocation = glGetUniformLocation(shaderProgram, "u_Transform");
+    damageTintLocation = glGetUniformLocation(shaderProgram, "u_DamageTint");
     createGeometry();
+    std::srand(static_cast<unsigned int>(std::time(nullptr)));
+    spawnEnemy();
     std::cout << "Controls: click lanes to toggle selection; W/Up jumps and hold S/Down to duck; Esc pauses; R resets.\n";
 
     while (!glfwWindowShouldClose(window)) {
@@ -443,13 +558,24 @@ int main() {
         float deltaTime = std::min(now - lastFrameTime, 0.05f);
         lastFrameTime = now;
         if (!paused && !gameOver) {
+            enemySpawnTimer += deltaTime;
+            if (enemySpawnTimer >= ENEMY_SPAWN_INTERVAL) {
+                spawnEnemy();
+                enemySpawnTimer = 0.0f;
+            }
             for (Player& player : players) {
                 player.jumpTimer = std::max(0.0f, player.jumpTimer - deltaTime);
                 player.ducking = player.alive && player.type != PlayerType::Defense &&
                     player.jumpTimer <= 0.0f && selectedLanes[player.lane] && duckKeyHeld;
             }
-            enemyX -= enemySpeed * deltaTime;
-            if (enemyX < -0.78f) gameOver = true;
+            for (Enemy& enemy : enemies) {
+                if (!enemy.alive) continue;
+                enemy.pos.x -= enemy.speed * deltaTime;
+                if (enemy.pos.x < -0.78f) {
+                    gameOver = true;
+                    break;
+                }
+            }
             if (glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS) coins = 1;
         }
 
