@@ -38,6 +38,8 @@ constexpr float HARD_ENEMY_ATTACK_INTERVAL = 1.2f;
 constexpr int EASY_ENEMY_DAMAGE = 1;
 constexpr int MEDIUM_ENEMY_DAMAGE = 1;
 constexpr int HARD_ENEMY_DAMAGE = 2;
+constexpr int MELEE_PLAYER_DAMAGE = 1;
+constexpr int LONG_RANGE_PLAYER_DAMAGE = 1;
 constexpr float MELEE_PLAYER_ATTACK_INTERVAL = 1.0f;
 constexpr float LONG_RANGE_PLAYER_ATTACK_INTERVAL = 1.5f;
 constexpr float DEFENSE_ACTION_INTERVAL = 1.0f;
@@ -111,6 +113,13 @@ struct EnemyProjectile {
     EnemyProjectileHeight height;
     bool alive;
 };
+struct PlayerProjectile {
+    glm::vec2 pos;
+    int lane;
+    float speedPixelsPerSecond;
+    int damage;
+    bool alive;
+};
 
 GLuint shaderProgram = 0;
 GLint transformLocation = -1;
@@ -126,6 +135,7 @@ std::vector<Player> players{
 bool duckKeyHeld = false;
 std::vector<Enemy> enemies;
 std::vector<EnemyProjectile> enemyProjectiles;
+std::vector<PlayerProjectile> playerProjectiles;
 float enemySpawnTimer = 0.0f;
 int coins = 0;
 bool paused = false;
@@ -257,6 +267,7 @@ void spawnEnemy() {
 void resetEnemies() {
     enemies.clear();
     enemyProjectiles.clear();
+    playerProjectiles.clear();
     enemySpawnTimer = 0.0f;
     spawnEnemy();
 }
@@ -462,7 +473,8 @@ void drawPlayerCharacter(float x, float y, PlayerType playerType,
         drawPlayerPart(rectangleShape, x, y, 0.022f, -0.17f, 0.024f, 0.10f,
                        darkCloth, 0, jumpOffset, ducking);
         drawPlayerPart(rectangleShape, x, y, 0.09f, -0.025f, 0.025f, 0.19f,
-                       glm::vec3(0.48f,0.28f,0.12f), -0.15f, jumpOffset, ducking);
+                       glm::vec3(0.48f,0.28f,0.12f), meleeAttacking ? 0.15f : -0.15f,
+                       jumpOffset, ducking);
         drawPlayerPart(rectangleShape, x, y, 0.085f, -0.02f, 0.105f, 0.012f,
                        glm::vec3(0.78f,0.70f,0.45f), 0, jumpOffset, ducking);
         break;
@@ -538,7 +550,7 @@ void updateCombat(float deltaTime) {
             float nextX = enemy.pos.x - pixelsPerSecondToNdc(enemy.speedPixelsPerSecond) * deltaTime;
             bool waitingAtCombat = false;
             for (const Player& player : players) {
-                if (!player.alive || player.lane != enemy.lane || player.engagedEnemy < 0) continue;
+                if (!player.alive || player.lane != enemy.lane) continue;
                 float distance = contactDistance(player, enemy);
                 if (enemy.pos.x >= player.pos.x && nextX <= player.pos.x + distance) {
                     enemy.pos.x = player.pos.x + distance;
@@ -570,7 +582,12 @@ void updateCombat(float deltaTime) {
         if (enemy.type == EnemyType::HardMelee) {
             if (nearestDistance <= contactDistance(*target, enemy)) {
                 target->health -= GameplayTuning::HARD_ENEMY_DAMAGE;
-                if (target->health <= 0) target->alive = false;
+                if (target->health <= 0) {
+                    target->alive = false;
+                    if (target->engagedEnemy >= 0 && target->engagedEnemy < static_cast<int>(enemies.size()))
+                        enemies[target->engagedEnemy].engaged = false;
+                    target->engagedEnemy = -1;
+                }
                 enemy.attackCooldown = enemyAttackInterval(enemy.type);
             }
         } else {
@@ -591,20 +608,29 @@ void updateCombat(float deltaTime) {
         if (!projectile.alive) continue;
         float previousX = projectile.pos.x;
         projectile.pos.x -= pixelsPerSecondToNdc(projectile.speedPixelsPerSecond) * deltaTime;
+        Player* firstHit = nullptr;
         for (Player& player : players) {
             if (!player.alive || player.lane != projectile.lane) continue;
-            bool avoided = projectile.height == EnemyProjectileHeight::Upper
-                ? player.ducking
-                : player.jumpTimer > 0.0f;
             float collisionDistance = 0.5f * playerBodyWidth(player.type);
             bool crossedPlayer = previousX >= player.pos.x - collisionDistance &&
                 projectile.pos.x <= player.pos.x + collisionDistance;
-            if (crossedPlayer && !avoided) {
-                player.health -= projectile.damage;
-                if (player.health <= 0) player.alive = false;
-                projectile.alive = false;
-                break;
+            bool avoided = player.type != PlayerType::Defense &&
+                (projectile.height == EnemyProjectileHeight::Upper
+                    ? player.ducking
+                    : player.jumpTimer > 0.0f);
+            if (crossedPlayer && !avoided && (!firstHit || player.pos.x > firstHit->pos.x)) {
+                firstHit = &player;
             }
+        }
+        if (firstHit) {
+            firstHit->health -= projectile.damage;
+            if (firstHit->health <= 0) {
+                firstHit->alive = false;
+                if (firstHit->engagedEnemy >= 0 && firstHit->engagedEnemy < static_cast<int>(enemies.size()))
+                    enemies[firstHit->engagedEnemy].engaged = false;
+                firstHit->engagedEnemy = -1;
+            }
+            projectile.alive = false;
         }
         if (projectile.pos.x < -1.1f) projectile.alive = false;
     }
@@ -614,7 +640,7 @@ void updateCombat(float deltaTime) {
         enemyProjectiles.end());
 
     for (Player& player : players) {
-        if (!player.alive || player.type != PlayerType::Melee || player.engagedEnemy >= 0) continue;
+        if (!player.alive || player.type == PlayerType::Defense || player.engagedEnemy >= 0) continue;
         int closestEnemy = -1;
         float closestDistance = 100.0f;
         for (int i = 0; i < static_cast<int>(enemies.size()); ++i) {
@@ -640,9 +666,10 @@ void updateCombat(float deltaTime) {
             player.engagedEnemy = -1;
             continue;
         }
+        if (player.type == PlayerType::LongRange) continue;
         player.attackCooldown -= deltaTime;
         if (player.attackCooldown <= 0.0f) {
-            enemy.health -= 1;
+            enemy.health -= GameplayTuning::MELEE_PLAYER_DAMAGE;
             player.attackCooldown = GameplayTuning::MELEE_PLAYER_ATTACK_INTERVAL;
             player.attackAnimationTimer = GameplayTuning::MELEE_ATTACK_ANIMATION_DURATION;
             if (enemy.health <= 0) {
@@ -653,6 +680,66 @@ void updateCombat(float deltaTime) {
             }
         }
     }
+
+    for (Player& player : players) {
+        if (!player.alive || player.type != PlayerType::LongRange) continue;
+        player.attackCooldown -= deltaTime;
+        if (player.attackCooldown > 0.0f) continue;
+        int targetEnemy = -1;
+        float nearestDistance = 100.0f;
+        for (int i = 0; i < static_cast<int>(enemies.size()); ++i) {
+            const Enemy& enemy = enemies[i];
+            if (!enemy.alive || enemy.lane != player.lane || enemy.pos.x < player.pos.x) continue;
+            float distance = enemy.pos.x - player.pos.x;
+            if (distance < nearestDistance) {
+                nearestDistance = distance;
+                targetEnemy = i;
+            }
+        }
+        if (targetEnemy >= 0) {
+            playerProjectiles.push_back({
+                glm::vec2(player.pos.x + 0.11f, LANE_Y[player.lane] + 0.015f), player.lane,
+                GameplayTuning::PLAYER_PROJECTILE_SPEED_PIXELS_PER_SECOND,
+                GameplayTuning::LONG_RANGE_PLAYER_DAMAGE, true
+            });
+            player.attackCooldown = GameplayTuning::LONG_RANGE_PLAYER_ATTACK_INTERVAL;
+            player.attackAnimationTimer = GameplayTuning::MELEE_ATTACK_ANIMATION_DURATION;
+        }
+    }
+
+    for (PlayerProjectile& projectile : playerProjectiles) {
+        if (!projectile.alive) continue;
+        float previousX = projectile.pos.x;
+        projectile.pos.x += pixelsPerSecondToNdc(projectile.speedPixelsPerSecond) * deltaTime;
+        Enemy* firstHit = nullptr;
+        for (Enemy& enemy : enemies) {
+            if (!enemy.alive || enemy.lane != projectile.lane) continue;
+            float collisionDistance = 0.5f * enemyBodyWidth(enemy.type);
+            bool crossedEnemy = previousX <= enemy.pos.x + collisionDistance &&
+                projectile.pos.x >= enemy.pos.x - collisionDistance;
+            if (crossedEnemy && (!firstHit || enemy.pos.x < firstHit->pos.x)) firstHit = &enemy;
+        }
+        if (firstHit) {
+            firstHit->health -= projectile.damage;
+            if (firstHit->health <= 0) {
+                firstHit->alive = false;
+                firstHit->engaged = false;
+                for (Player& player : players) {
+                    if (player.engagedEnemy >= 0 && player.engagedEnemy < static_cast<int>(enemies.size()) &&
+                        &enemies[player.engagedEnemy] == firstHit) {
+                        player.engagedEnemy = -1;
+                        player.attackCooldown = 0.0f;
+                    }
+                }
+            }
+            projectile.alive = false;
+        }
+        if (projectile.pos.x > 1.1f) projectile.alive = false;
+    }
+    playerProjectiles.erase(
+        std::remove_if(playerProjectiles.begin(), playerProjectiles.end(),
+                       [](const PlayerProjectile& projectile) { return !projectile.alive; }),
+        playerProjectiles.end());
 }
 
 void drawPalmTree(float x, float groundY) {
@@ -740,6 +827,10 @@ void renderScene() {
                 : glm::vec3(0.95f, 0.78f, 0.20f);
             drawShape(circleShape, projectile.pos.x, projectile.pos.y,
                       0.035f, 0.035f, projectileColor);
+        }
+        for (const PlayerProjectile& projectile : playerProjectiles) {
+            drawShape(triangleShape, projectile.pos.x, projectile.pos.y,
+                      0.045f, 0.025f, glm::vec3(0.95f, 0.88f, 0.44f));
         }
     }
 
