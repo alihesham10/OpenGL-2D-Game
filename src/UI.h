@@ -2,12 +2,17 @@
 
 #include "Player.h"
 
+#include <string>
+
 class Renderer;
 
 class UI {
 public:
     void render(Renderer& renderer, int coins, int coinsEarnedSinceStart,
                 int hoveredPlayerCard) const;
+    void renderCutsceneDialogue(Renderer& renderer, const std::string& speaker,
+                               const std::string& dialogue,
+                               const std::string& title = std::string()) const;
 
 private:
     void drawDigit(Renderer& renderer, int digit, float centerX, float centerY,

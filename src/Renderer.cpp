@@ -41,6 +41,7 @@ float damageTintForHealth(int health, int maxHealth) {
     healthRatio = glm::clamp(healthRatio, 0.0f, 1.0f);
     return 0.90f * (1.0f - healthRatio);
 }
+
 }
 
 bool Renderer::initialize() {
@@ -156,6 +157,10 @@ void Renderer::drawShape(const Shape& shape, float x, float y, float sx, float s
         float gray = glm::dot(color, glm::vec3(0.299f, 0.587f, 0.114f));
         color = glm::vec3(gray);
     }
+    x = (x + sceneOffsetX_) * sceneScale_;
+    y = (y + sceneOffsetY_) * sceneScale_;
+    sx *= sceneScale_;
+    sy *= sceneScale_;
     glm::mat4 model(1.0f);
     model = glm::translate(model, glm::vec3(x, y, 0.0f));
     model = glm::rotate(model, rotation, glm::vec3(0, 0, 1));
@@ -204,7 +209,19 @@ void Renderer::drawEnemyPart(const Shape& shape, float centerX, float centerY,
               color, rotation);
 }
 
-void Renderer::drawEnemyCharacter(float x, float y, const Enemy& enemy) {
+void Renderer::drawTreasureMap(float x, float y) {
+    drawShape(rectangleShape_, x, y, 0.092f, 0.066f, glm::vec3(0.32f, 0.20f, 0.08f), -0.08f);
+    drawShape(rectangleShape_, x, y, 0.080f, 0.054f, glm::vec3(0.94f, 0.82f, 0.52f), -0.08f);
+    drawShape(rectangleShape_, x - 0.014f, y + 0.008f, 0.030f, 0.004f,
+              glm::vec3(0.56f, 0.22f, 0.10f), -0.25f);
+    drawShape(rectangleShape_, x + 0.010f, y - 0.008f, 0.032f, 0.004f,
+              glm::vec3(0.56f, 0.22f, 0.10f), 0.28f);
+    drawShape(circleShape_, x + 0.015f, y + 0.014f, 0.009f, 0.009f,
+              glm::vec3(0.22f, 0.45f, 0.22f));
+}
+
+void Renderer::drawEnemyCharacter(float x, float y, const Enemy& enemy,
+                                  float hardWeaponRotation) {
     currentDamageTint_ = damageTintForHealth(enemy.health, enemy.maximumHealth());
     const glm::vec3 skin(0.66f, 0.40f, 0.24f);
     const glm::vec3 darkCloth(0.20f, 0.12f, 0.11f);
@@ -254,9 +271,9 @@ void Renderer::drawEnemyCharacter(float x, float y, const Enemy& enemy) {
         drawEnemyPart(rectangleShape_, x, y, -0.04f, -0.17f, 0.04f, 0.10f, darkCloth);
         drawEnemyPart(rectangleShape_, x, y, 0.04f, -0.17f, 0.04f, 0.10f, darkCloth);
         drawEnemyPart(rectangleShape_, x, y, -0.12f, -0.015f, 0.14f, 0.04f,
-                      glm::vec3(0.62f,0.61f,0.56f), -0.25f);
+                      glm::vec3(0.62f,0.61f,0.56f), hardWeaponRotation);
         drawEnemyPart(rectangleShape_, x, y, -0.055f, -0.005f, 0.04f, 0.055f,
-                      glm::vec3(0.34f,0.20f,0.11f), -0.25f);
+                      glm::vec3(0.34f,0.20f,0.11f), hardWeaponRotation);
         break;
     }
     currentDamageTint_ = 0.0f;
@@ -269,12 +286,13 @@ void Renderer::drawPlayerPart(const Shape& shape, float x, float y, float offset
     const float poseOffset = jumpOffset - (ducking ? 0.025f : 0.0f);
     drawShape(shape, x + offsetX * playerDrawingScale_,
               y + (poseOffset + offsetY * heightScale) * playerDrawingScale_,
-              sx * playerDrawingScale_, sy * heightScale * playerDrawingScale_, color, rotation);
+              sx * playerDrawingScale_, sy * heightScale * playerDrawingScale_,
+              color, rotation);
 }
 
 void Renderer::drawPlayerCharacter(float x, float y, PlayerType playerType, int health,
                                    float jumpOffset, bool ducking, bool attacking,
-                                   float scale, bool grayscale) {
+                                   float scale, bool grayscale, float shieldRaise) {
     const float previousScale = playerDrawingScale_;
     const bool previousGrayscale = grayscaleDrawing_;
     playerDrawingScale_ = scale;
@@ -300,8 +318,8 @@ void Renderer::drawPlayerCharacter(float x, float y, PlayerType playerType, int 
         drawPlayerPart(rectangleShape_, x,y,-0.035f,-0.17f,0.035f,0.10f,darkCloth,0,jumpOffset,ducking);
         drawPlayerPart(rectangleShape_, x,y,0.035f,-0.17f,0.035f,0.10f,darkCloth,0,jumpOffset,ducking);
         // A broad, tall shield reaches above the protected players' heads.
-        drawPlayerPart(rectangleShape_, x,y,0.075f,-0.025f,0.15f,0.30f,glm::vec3(0.40f,0.25f,0.12f),0,jumpOffset,ducking);
-        drawPlayerPart(triangleShape_, x,y,0.075f,-0.19f,0.15f,0.08f,glm::vec3(0.40f,0.25f,0.12f),0,jumpOffset,ducking);
+        drawPlayerPart(rectangleShape_, x,y,0.075f,-0.025f + shieldRaise,0.15f,0.30f,glm::vec3(0.40f,0.25f,0.12f),0,jumpOffset,ducking);
+        drawPlayerPart(triangleShape_, x,y,0.075f,-0.19f + shieldRaise,0.15f,0.08f,glm::vec3(0.40f,0.25f,0.12f),0,jumpOffset,ducking);
         break;
     case PlayerType::LongRange:
         drawPlayerPart(rectangleShape_, x,y,0,-0.075f,0.065f,0.15f,glm::vec3(0.43f,0.47f,0.30f),0,jumpOffset,ducking);
@@ -419,4 +437,41 @@ void Renderer::drawWorld(std::vector<Player>& players, const std::vector<Enemy>&
         drawCircle(collectible.pos.x, GameConfig::LANE_Y[collectible.lane], 0.035f,0.035f,glm::vec3(1.0f,0.78f,0.10f));
         drawCircle(collectible.pos.x, GameConfig::LANE_Y[collectible.lane], 0.020f,0.020f,glm::vec3(0.90f,0.52f,0.05f));
     }
+}
+
+void Renderer::drawCutscene(const std::vector<Player>& heroes,
+                            const std::vector<Enemy>& enemies, float elapsed,
+                            bool heshamAttacking, bool fahmyAiming,
+                            float shikoShieldRaise, float bossWeaponRotation) {
+    const bool noSelectedLanes[GameConfig::LANE_COUNT] = {false, false, false};
+    sceneScale_ = 1.0f + 0.018f * glm::clamp(elapsed / 10.0f, 0.0f, 1.0f);
+    sceneOffsetX_ = -0.025f * glm::clamp(elapsed / 10.0f, 0.0f, 1.0f);
+    sceneOffsetY_ = 0.0f;
+    glUseProgram(shaderProgram_);
+    drawEnvironment(noSelectedLanes, -1);
+
+    for (const Player& hero : heroes) {
+        const bool attacking = hero.type == PlayerType::Melee ? heshamAttacking
+            : (hero.type == PlayerType::LongRange && fahmyAiming);
+        const float shieldRaise = hero.type == PlayerType::Defense ? shikoShieldRaise : 0.0f;
+        drawPlayerCharacter(hero.pos.x, hero.pos.y, hero.type, hero.health,
+                            0.0f, false, attacking, 0.68f, false, shieldRaise);
+    }
+
+    for (std::size_t i = 0; i < enemies.size(); ++i) {
+        if (!enemies[i].alive) continue;
+        const float weaponRotation = i == 0 ? bossWeaponRotation : -0.25f;
+        drawEnemyCharacter(enemies[i].pos.x, enemies[i].pos.y, enemies[i], weaponRotation);
+    }
+
+    for (const Player& hero : heroes) {
+        if (hero.type == PlayerType::Melee) {
+            drawTreasureMap(hero.pos.x + 0.12f, hero.pos.y + 0.055f);
+            break;
+        }
+    }
+
+    sceneScale_ = 1.0f;
+    sceneOffsetX_ = 0.0f;
+    sceneOffsetY_ = 0.0f;
 }

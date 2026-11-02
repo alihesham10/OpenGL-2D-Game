@@ -14,6 +14,11 @@ float contactDistance(const Player& player, const Enemy& enemy) {
     if (player.type == PlayerType::Melee) distance += GameConfig::MELEE_WEAPON_REACH_NDC;
     return distance;
 }
+
+float smoothProgress(float value) {
+    const float t = std::clamp(value, 0.0f, 1.0f);
+    return t * t * (3.0f - 2.0f * t);
+}
 }
 
 Game::Game() : waveManager_(GameConfig::ENEMY_SPAWN_INTERVAL) {}
@@ -57,6 +62,7 @@ int Game::playerCostForCard(int card) const {
 
 void Game::handleCursorPosition(double x, double y) {
     const glm::vec2 position = cursorToNdc(x, y);
+    if (menu_.state() == MenuState::Cutscene) return;
     if (menu_.state() == MenuState::MainMenu) {
         menu_.setHoveredMainOption(menu_.mainMenuOptionAt(position.x, position.y));
         menu_.setHoveredPauseOption(-1);
@@ -97,6 +103,7 @@ void Game::handleCursorPosition(double x, double y) {
 }
 
 void Game::handleMouseButton(int button, int action) {
+    if (menu_.state() == MenuState::Cutscene) return;
     if (menu_.state() == MenuState::MainMenu) {
         if (button != GLFW_MOUSE_BUTTON_LEFT || action != GLFW_PRESS) return;
         double x, y;
@@ -104,7 +111,7 @@ void Game::handleMouseButton(int button, int action) {
         const glm::vec2 position = cursorToNdc(x, y);
         const int option = menu_.mainMenuOptionAt(position.x, position.y);
         if (option == 0) {
-            restartGame();
+            startIntroCutscene();
         } else if (option == 1) {
             glfwSetWindowShouldClose(window_, GLFW_TRUE);
         }
@@ -169,9 +176,10 @@ void Game::handleMouseButton(int button, int action) {
 }
 
 void Game::handleKey(int key, int action) {
+    if (menu_.state() == MenuState::Cutscene) return;
     if (menu_.state() == MenuState::MainMenu) {
         if (action == GLFW_PRESS && (key == GLFW_KEY_ENTER || key == GLFW_KEY_SPACE))
-            restartGame();
+            startIntroCutscene();
         else if (action == GLFW_PRESS && key == GLFW_KEY_ESCAPE)
             glfwSetWindowShouldClose(window_, GLFW_TRUE);
         return;
@@ -271,12 +279,71 @@ void Game::restartGame() {
     gameOver_ = false;
     gameWon_ = false;
     paused_ = false;
+    cutsceneHeroes_.clear();
+    cutsceneEnemies_.clear();
+    cutsceneElapsed_ = 0.0f;
     menu_.clear();
 }
 
+void Game::startIntroCutscene() {
+    restartGame();
+    cutsceneHeroes_.emplace_back(PlayerType::Melee, glm::vec2(-0.52f, -0.32f), 1);
+    cutsceneHeroes_.emplace_back(PlayerType::LongRange, glm::vec2(-0.25f, -0.32f), 1);
+    cutsceneHeroes_.emplace_back(PlayerType::Defense, glm::vec2(0.02f, -0.32f), 1);
+
+    cutsceneEnemies_.emplace_back(EnemyType::HardMelee, glm::vec2(1.18f, -0.32f), 1);
+    cutsceneEnemies_.emplace_back(EnemyType::MediumLowerRanged, glm::vec2(1.40f, -0.32f), 1);
+    cutsceneEnemies_.emplace_back(EnemyType::EasyUpperRanged, glm::vec2(1.62f, -0.32f), 1);
+    for (Enemy& enemy : cutsceneEnemies_) enemy.alive = false;
+
+    menu_.showCutscene();
+}
+
 void Game::update(float deltaTime) {
+    if (menu_.state() == MenuState::Cutscene) {
+        updateCutscene(deltaTime);
+        return;
+    }
     if (menu_.state() != MenuState::MainMenu && !paused_ && !gameOver_ && !gameWon_)
         updateCombat(deltaTime);
+}
+
+void Game::updateCutscene(float deltaTime) {
+    cutsceneElapsed_ += deltaTime;
+    if (cutsceneElapsed_ >= 10.0f) {
+        restartGame();
+        return;
+    }
+
+    const float time = cutsceneElapsed_;
+    const float idleBob = 0.008f * std::sin(time * 4.0f);
+    const float heroStep = smoothProgress((time - 5.0f) / 1.3f);
+    const float alarm = smoothProgress((time - 2.0f) / 0.25f) *
+        (1.0f - smoothProgress((time - 2.25f) / 0.25f));
+    cutsceneHeroes_[0].pos = glm::vec2(-0.52f - 0.018f * alarm + 0.13f * heroStep,
+                                      -0.32f + idleBob);
+    cutsceneHeroes_[1].pos = glm::vec2(-0.25f - 0.014f * alarm + 0.01f * std::sin(time * 3.0f),
+                                      -0.32f + 0.006f * std::sin(time * 4.0f + 1.4f));
+    cutsceneHeroes_[2].pos = glm::vec2(0.02f - 0.012f * alarm + 0.08f * heroStep,
+                                      -0.32f + 0.006f * std::sin(time * 4.0f + 2.8f));
+
+    const float entrance = smoothProgress((time - 2.0f) / 3.0f);
+    const float bossX = 1.18f - 0.58f * entrance;
+    cutsceneEnemies_[0].alive = time >= 2.0f;
+    cutsceneEnemies_[0].pos = glm::vec2(bossX, -0.32f + 0.005f * std::sin(time * 5.0f));
+    cutsceneEnemies_[1].alive = time >= 2.35f;
+    cutsceneEnemies_[1].pos = glm::vec2(bossX + 0.20f,
+                                        -0.32f + 0.005f * std::sin(time * 5.0f + 1.0f));
+    cutsceneEnemies_[2].alive = time >= 2.70f;
+    cutsceneEnemies_[2].pos = glm::vec2(bossX + 0.40f,
+                                        -0.32f + 0.005f * std::sin(time * 5.0f + 2.0f));
+
+    const float preparation = smoothProgress((time - 5.0f) / 1.2f);
+    cutsceneHeshamAttacking_ = time >= 5.0f && std::sin(time * 8.0f) > -0.15f;
+    cutsceneFahmyAiming_ = time >= 5.0f;
+    cutsceneShikoShieldRaise_ = 0.075f * preparation;
+    cutsceneBossWeaponRotation_ = -0.25f - 0.85f * preparation +
+        (time >= 5.0f ? 0.07f * std::sin(time * 5.0f) : 0.0f);
 }
 
 void Game::updateCombat(float deltaTime) {
@@ -445,6 +512,27 @@ void Game::updateCombat(float deltaTime) {
 }
 
 void Game::render() {
+    if (menu_.state() == MenuState::Cutscene) {
+        renderer_.drawCutscene(cutsceneHeroes_, cutsceneEnemies_, cutsceneElapsed_,
+                               cutsceneHeshamAttacking_, cutsceneFahmyAiming_,
+                               cutsceneShikoShieldRaise_, cutsceneBossWeaponRotation_);
+        if (cutsceneElapsed_ < 2.0f) {
+            ui_.renderCutsceneDialogue(renderer_, "HESHAM",
+                "WE FINALLY FOUND THE TREASURE MAP!");
+        } else if (cutsceneElapsed_ < 5.0f) {
+            ui_.renderCutsceneDialogue(renderer_, "BOSS",
+                "HAND OVER THAT MAP! WE WON'T LEAVE WITHOUT IT!");
+        } else if (cutsceneElapsed_ < 6.5f) {
+            ui_.renderCutsceneDialogue(renderer_, "FAHMY",
+                "YOU'LL HAVE TO GET THROUGH US FIRST!");
+        } else if (cutsceneElapsed_ < 8.0f) {
+            ui_.renderCutsceneDialogue(renderer_, "SHIKO",
+                "THEN LET'S PROTECT IT TOGETHER!");
+        } else {
+            ui_.renderCutsceneDialogue(renderer_, "", "", "PROTECT THE TREASURE MAP!");
+        }
+        return;
+    }
     renderer_.drawWorld(players_, enemies_, enemyProjectiles_, playerProjectiles_,
                         collectibles_, selectedLanes_, hoveredLane_, gameOver_);
     if (menu_.state() != MenuState::MainMenu)

@@ -1,12 +1,13 @@
 #pragma once
 
-enum class MenuState { MainMenu, None, Paused, GameOver, GameWon };
+enum class MenuState { MainMenu, Cutscene, None, Paused, GameOver, GameWon };
 
 class Renderer;
 
 class Menu {
 public:
     void showMainMenu();
+    void showCutscene();
     void setHoveredMainOption(int option);
     int mainMenuOptionAt(float x, float y) const;
     void setHoveredPauseOption(int option);

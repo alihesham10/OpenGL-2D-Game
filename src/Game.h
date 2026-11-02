@@ -29,6 +29,7 @@ private:
     void handleMouseButton(int button, int action);
     void handleKey(int key, int action);
     void update(float deltaTime);
+    void updateCutscene(float deltaTime);
     void updateCombat(float deltaTime);
     void render();
     void spawnEnemy(EnemyType type);
@@ -36,6 +37,7 @@ private:
     void resetEnemies();
     void resetPlayers();
     void restartGame();
+    void startIntroCutscene();
     void purchaseAndPlacePlayer(int card, int lane);
     bool playerCardIsUnlocked(int card) const;
     int playerCostForCard(int card) const;
@@ -52,6 +54,13 @@ private:
     std::vector<Projectile> enemyProjectiles_;
     std::vector<Projectile> playerProjectiles_;
     std::vector<Collectible> collectibles_;
+    std::vector<Player> cutsceneHeroes_;
+    std::vector<Enemy> cutsceneEnemies_;
+    float cutsceneElapsed_ = 0.0f;
+    bool cutsceneHeshamAttacking_ = false;
+    bool cutsceneFahmyAiming_ = false;
+    float cutsceneShikoShieldRaise_ = 0.0f;
+    float cutsceneBossWeaponRotation_ = -0.25f;
     bool selectedLanes_[3] = {false, false, false};
     int hoveredLane_ = -1;
     bool duckKeyHeld_ = false;

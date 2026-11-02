@@ -6,6 +6,69 @@
 #include <algorithm>
 #include <string>
 
+namespace {
+const char* const* bitmapGlyph(char letter) {
+    static const char* const glyphs[26][7] = {
+        {"01110","10001","10001","11111","10001","10001","10001"}, // A
+        {"11110","10001","10001","11110","10001","10001","11110"}, // B
+        {"01111","10000","10000","10000","10000","10000","01111"}, // C
+        {"11110","10001","10001","10001","10001","10001","11110"}, // D
+        {"11111","10000","10000","11110","10000","10000","11111"}, // E
+        {"11111","10000","10000","11110","10000","10000","10000"}, // F
+        {"01111","10000","10000","10111","10001","10001","01111"}, // G
+        {"10001","10001","10001","11111","10001","10001","10001"}, // H
+        {"11111","00100","00100","00100","00100","00100","11111"}, // I
+        {"00111","00010","00010","00010","10010","10010","01100"}, // J
+        {"10001","10010","10100","11000","10100","10010","10001"}, // K
+        {"10000","10000","10000","10000","10000","10000","11111"}, // L
+        {"10001","11011","10101","10101","10001","10001","10001"}, // M
+        {"10001","11001","10101","10011","10001","10001","10001"}, // N
+        {"01110","10001","10001","10001","10001","10001","01110"}, // O
+        {"11110","10001","10001","11110","10000","10000","10000"}, // P
+        {"01110","10001","10001","10001","10101","10010","01101"}, // Q
+        {"11110","10001","10001","11110","10100","10010","10001"}, // R
+        {"01111","10000","10000","01110","00001","00001","11110"}, // S
+        {"11111","00100","00100","00100","00100","00100","00100"}, // T
+        {"10001","10001","10001","10001","10001","10001","01110"}, // U
+        {"10001","10001","10001","10001","10001","01010","00100"}, // V
+        {"10001","10001","10001","10101","10101","10101","01010"}, // W
+        {"10001","10001","01010","00100","01010","10001","10001"}, // X
+        {"10001","10001","01010","00100","00100","00100","00100"}, // Y
+        {"11111","00001","00010","00100","01000","10000","11111"}  // Z
+    };
+    if (letter < 'A' || letter > 'Z') return nullptr;
+    return glyphs[letter - 'A'];
+}
+
+void drawBitmapText(Renderer& renderer, const std::string& text, float centerX,
+                    float centerY, float pixel, glm::vec3 color) {
+    const float letterStep = pixel * 6.0f;
+    const float firstX = centerX - (static_cast<float>(text.size()) - 1.0f) * letterStep * 0.5f;
+    for (std::size_t letter = 0; letter < text.size(); ++letter) {
+        const char character = text[letter];
+        const float xCenter = firstX + static_cast<float>(letter) * letterStep;
+        if (character == '!') {
+            renderer.drawRectangle(xCenter, centerY + pixel, pixel * 0.8f, pixel * 3.4f, color);
+            renderer.drawRectangle(xCenter, centerY - pixel * 2.7f, pixel * 0.8f, pixel * 0.8f, color);
+            continue;
+        }
+        if (character == '\'') {
+            renderer.drawRectangle(xCenter, centerY + pixel * 3.0f, pixel * 0.8f, pixel * 1.4f, color);
+            continue;
+        }
+        const char* const* rows = bitmapGlyph(character);
+        if (!rows) continue;
+        for (int row = 0; row < 7; ++row) {
+            for (int column = 0; column < 5; ++column) {
+                if (rows[row][column] != '1') continue;
+                renderer.drawRectangle(xCenter + (column - 2) * pixel,
+                    centerY + (3 - row) * pixel, pixel * 0.82f, pixel * 0.82f, color);
+            }
+        }
+    }
+}
+}
+
 void UI::drawDigit(Renderer& renderer, int digit, float centerX, float centerY, bool grayscale) const {
     static const bool segments[10][7] = {
         {true, true, true, true, true, true, false},
@@ -47,53 +110,26 @@ void UI::drawName(Renderer& renderer, int card, float centerX, float centerY,
                   bool grayscale) const {
     // 5-by-7 bitmap letters keep the button labels independent of any font library.
     static const char* const names[] = {"HESHAM", "FAHMY", "SHIKO"};
-    static const char* const glyphs[26][7] = {
-        {"01110","10001","10001","11111","10001","10001","10001"}, // A
-        {"11110","10001","10001","11110","10001","10001","11110"}, // B
-        {"01111","10000","10000","10000","10000","10000","01111"}, // C
-        {"11110","10001","10001","10001","10001","10001","11110"}, // D
-        {"11111","10000","10000","11110","10000","10000","11111"}, // E
-        {"11111","10000","10000","11110","10000","10000","10000"}, // F
-        {"01111","10000","10000","10111","10001","10001","01111"}, // G
-        {"10001","10001","10001","11111","10001","10001","10001"}, // H
-        {"11111","00100","00100","00100","00100","00100","11111"}, // I
-        {"00111","00010","00010","00010","10010","10010","01100"}, // J
-        {"10001","10010","10100","11000","10100","10010","10001"}, // K
-        {"10000","10000","10000","10000","10000","10000","11111"}, // L
-        {"10001","11011","10101","10101","10001","10001","10001"}, // M
-        {"10001","11001","10101","10011","10001","10001","10001"}, // N
-        {"01110","10001","10001","10001","10001","10001","01110"}, // O
-        {"11110","10001","10001","11110","10000","10000","10000"}, // P
-        {"01110","10001","10001","10001","10101","10010","01101"}, // Q
-        {"11110","10001","10001","11110","10100","10010","10001"}, // R
-        {"01111","10000","10000","01110","00001","00001","11110"}, // S
-        {"11111","00100","00100","00100","00100","00100","00100"}, // T
-        {"10001","10001","10001","10001","10001","10001","01110"}, // U
-        {"10001","10001","10001","10001","10001","01010","00100"}, // V
-        {"10001","10001","10001","10101","10101","10101","01010"}, // W
-        {"10001","10001","01010","00100","01010","10001","10001"}, // X
-        {"10001","10001","01010","00100","00100","00100","00100"}, // Y
-        {"11111","00001","00010","00100","01000","10000","11111"}  // Z
-    };
     if (card < 0 || card >= 3) return;
     const std::string name = names[card];
     constexpr float pixel = 0.0045f;
-    constexpr float letterStep = pixel * 6.0f;
-    constexpr float rowStep = pixel * 1.15f;
-    const float firstX = centerX - (name.size() - 1) * letterStep * 0.5f;
     const float gray = 0.299f + 0.587f * 0.86f + 0.114f * 0.35f;
     const glm::vec3 color = grayscale ? glm::vec3(gray) : glm::vec3(1.0f, 0.86f, 0.35f);
-    for (std::size_t letter = 0; letter < name.size(); ++letter) {
-        const int glyphIndex = name[letter] - 'A';
-        for (int row = 0; row < 7; ++row) {
-            for (int column = 0; column < 5; ++column) {
-                if (glyphs[glyphIndex][row][column] != '1') continue;
-                const float x = firstX + letter * letterStep + (column - 2) * pixel;
-                const float y = centerY + (3 - row) * rowStep;
-                renderer.drawRectangle(x, y, pixel * 0.82f, pixel * 0.82f, color);
-            }
-        }
+    drawBitmapText(renderer, name, centerX, centerY, pixel, color);
+}
+
+void UI::renderCutsceneDialogue(Renderer& renderer, const std::string& speaker,
+                                const std::string& dialogue, const std::string& title) const {
+    if (!title.empty()) {
+        renderer.drawRectangle(0.0f, 0.57f, 1.78f, 0.20f, glm::vec3(0.08f, 0.09f, 0.10f));
+        drawBitmapText(renderer, title, 0.0f, 0.57f, 0.0085f, glm::vec3(1.0f, 0.82f, 0.36f));
+        return;
     }
+    renderer.drawRectangle(0.0f, -0.81f, 1.78f, 0.22f, glm::vec3(0.08f, 0.09f, 0.10f));
+    drawBitmapText(renderer, speaker, -0.72f, -0.755f, 0.0055f,
+                   glm::vec3(1.0f, 0.78f, 0.28f));
+    drawBitmapText(renderer, dialogue, 0.0f, -0.84f, 0.0045f,
+                   glm::vec3(1.0f, 0.94f, 0.78f));
 }
 
 void UI::drawCoinCount(Renderer& renderer, int coins) const {

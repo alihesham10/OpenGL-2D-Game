@@ -60,6 +60,13 @@ void Menu::showMainMenu() {
     hoveredResultOption_ = -1;
 }
 
+void Menu::showCutscene() {
+    state_ = MenuState::Cutscene;
+    hoveredMainOption_ = -1;
+    hoveredPauseOption_ = -1;
+    hoveredResultOption_ = -1;
+}
+
 void Menu::setHoveredMainOption(int option) {
     hoveredMainOption_ = state_ == MenuState::MainMenu && (option == 0 || option == 1)
         ? option : -1;
