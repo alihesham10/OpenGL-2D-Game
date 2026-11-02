@@ -71,6 +71,14 @@ void Game::handleCursorPosition(double x, double y) {
         hoveredPlayerCard_ = -1;
         return;
     }
+    if (menu_.state() == MenuState::GameOver || menu_.state() == MenuState::GameWon) {
+        menu_.setHoveredResultOption(menu_.resultMenuOptionAt(position.x, position.y));
+        menu_.setHoveredMainOption(-1);
+        menu_.setHoveredPauseOption(-1);
+        hoveredLane_ = -1;
+        hoveredPlayerCard_ = -1;
+        return;
+    }
     hoveredLane_ = laneFromY(position.y);
     hoveredPlayerCard_ = -1;
     for (int card = 0; card < 3; ++card) {
@@ -114,6 +122,20 @@ void Game::handleMouseButton(int button, int action) {
         } else if (option == 1) {
             restartGame();
         } else if (option == 2) {
+            restartGame();
+            menu_.showMainMenu();
+        }
+        return;
+    }
+    if (menu_.state() == MenuState::GameOver || menu_.state() == MenuState::GameWon) {
+        if (button != GLFW_MOUSE_BUTTON_LEFT || action != GLFW_PRESS) return;
+        double x, y;
+        glfwGetCursorPos(window_, &x, &y);
+        const glm::vec2 position = cursorToNdc(x, y);
+        const int option = menu_.resultMenuOptionAt(position.x, position.y);
+        if (option == 0) {
+            restartGame();
+        } else if (option == 1) {
             restartGame();
             menu_.showMainMenu();
         }
@@ -163,6 +185,15 @@ void Game::handleKey(int key, int action) {
         }
         return;
     }
+    if (gameOver_ || gameWon_) {
+        if (action == GLFW_PRESS && (key == GLFW_KEY_SPACE || key == GLFW_KEY_R))
+            restartGame();
+        else if (action == GLFW_PRESS && key == GLFW_KEY_M) {
+            restartGame();
+            menu_.showMainMenu();
+        }
+        return;
+    }
     if (action != GLFW_PRESS && action != GLFW_REPEAT) {
         if ((key == GLFW_KEY_S || key == GLFW_KEY_DOWN) && action == GLFW_RELEASE)
             duckKeyHeld_ = false;
@@ -172,11 +203,6 @@ void Game::handleKey(int key, int action) {
         restartGame();
         return;
     }
-    if ((gameOver_ || gameWon_) && key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
-        restartGame();
-        return;
-    }
-    if (gameOver_ || gameWon_) return;
     if (key == GLFW_KEY_S || key == GLFW_KEY_DOWN) {
         duckKeyHeld_ = true;
         return;

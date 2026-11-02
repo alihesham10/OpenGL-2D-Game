@@ -11,6 +11,8 @@ public:
     int mainMenuOptionAt(float x, float y) const;
     void setHoveredPauseOption(int option);
     int pauseMenuOptionAt(float x, float y) const;
+    void setHoveredResultOption(int option);
+    int resultMenuOptionAt(float x, float y) const;
     void togglePause();
     void showGameOver();
     void showGameWon();
@@ -22,4 +24,5 @@ private:
     MenuState state_ = MenuState::MainMenu;
     int hoveredMainOption_ = -1;
     int hoveredPauseOption_ = -1;
+    int hoveredResultOption_ = -1;
 };

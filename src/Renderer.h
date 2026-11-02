@@ -44,6 +44,9 @@ private:
     void createGeometry();
     void drawShape(const Shape& shape, float x, float y, float sx, float sy,
                    glm::vec3 color, float rotation = 0.0f);
+    void drawEnemyPart(const Shape& shape, float centerX, float centerY,
+                       float offsetX, float offsetY, float width, float height,
+                       glm::vec3 color, float rotation = 0.0f);
     void drawEnemyCharacter(float x, float y, const Enemy& enemy);
     void drawPlayerPart(const Shape& shape, float x, float y, float offsetX,
                         float offsetY, float sx, float sy, glm::vec3 color,

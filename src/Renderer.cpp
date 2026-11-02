@@ -194,6 +194,16 @@ void Renderer::drawHealthBar(float x, float y, int health, int maxHealth, glm::v
     }
 }
 
+void Renderer::drawEnemyPart(const Shape& shape, float centerX, float centerY,
+                            float offsetX, float offsetY, float width, float height,
+                            glm::vec3 color, float rotation) {
+    constexpr float laneCharacterScale = 0.68f;
+    drawShape(shape, centerX + offsetX * laneCharacterScale,
+              centerY + offsetY * laneCharacterScale,
+              width * laneCharacterScale, height * laneCharacterScale,
+              color, rotation);
+}
+
 void Renderer::drawEnemyCharacter(float x, float y, const Enemy& enemy) {
     currentDamageTint_ = damageTintForHealth(enemy.health, enemy.maximumHealth());
     const glm::vec3 skin(0.66f, 0.40f, 0.24f);
@@ -201,43 +211,52 @@ void Renderer::drawEnemyCharacter(float x, float y, const Enemy& enemy) {
     switch (enemy.type) {
     case EnemyType::EasyUpperRanged:
         // A hunched hooded scout wears a long tunic, unlike the upright player models.
-        drawShape(rectangleShape_, x + 0.008f, y - 0.080f, 0.105f, 0.17f,
-                  glm::vec3(0.35f,0.14f,0.12f), -0.12f);
-        drawShape(triangleShape_, x + 0.012f, y - 0.15f, 0.13f, 0.14f,
-                  glm::vec3(0.31f,0.12f,0.10f), 3.14159f);
-        drawShape(circleShape_, x - 0.012f, y + 0.045f, 0.048f, 0.048f, skin);
-        drawShape(triangleShape_, x - 0.012f, y + 0.078f, 0.13f, 0.11f, darkCloth);
-        drawShape(rectangleShape_, x - 0.012f, y + 0.025f, 0.07f, 0.018f, glm::vec3(0.14f,0.10f,0.09f));
-        drawShape(rectangleShape_, x - 0.035f, y - 0.18f, 0.055f, 0.07f, darkCloth, -0.12f);
-        drawShape(rectangleShape_, x + 0.032f, y - 0.18f, 0.055f, 0.07f, darkCloth, 0.10f);
+        drawEnemyPart(rectangleShape_, x, y, 0.008f, -0.080f, 0.105f, 0.17f,
+                      glm::vec3(0.35f,0.14f,0.12f), -0.12f);
+        drawEnemyPart(triangleShape_, x, y, 0.012f, -0.15f, 0.13f, 0.14f,
+                      glm::vec3(0.31f,0.12f,0.10f), 3.14159f);
+        drawEnemyPart(circleShape_, x, y, -0.012f, 0.045f, 0.048f, 0.048f, skin);
+        drawEnemyPart(triangleShape_, x, y, -0.012f, 0.078f, 0.13f, 0.11f, darkCloth);
+        drawEnemyPart(rectangleShape_, x, y, -0.012f, 0.025f, 0.07f, 0.018f,
+                      glm::vec3(0.14f,0.10f,0.09f));
+        drawEnemyPart(rectangleShape_, x, y, -0.035f, -0.18f, 0.055f, 0.07f,
+                      darkCloth, -0.12f);
+        drawEnemyPart(rectangleShape_, x, y, 0.032f, -0.18f, 0.055f, 0.07f,
+                      darkCloth, 0.10f);
         // Its visible reaching arm and short sling form a held weapon silhouette.
-        drawShape(rectangleShape_, x - 0.050f, y + 0.002f, 0.075f, 0.022f,
-                  glm::vec3(0.40f,0.22f,0.14f), 0.30f);
-        drawShape(circleShape_, x - 0.090f, y + 0.025f, 0.020f, 0.020f, skin);
-        drawShape(rectangleShape_, x - 0.115f, y + 0.075f, 0.085f, 0.014f,
-                  glm::vec3(0.48f,0.30f,0.15f), 0.30f);
-        drawShape(rectangleShape_, x - 0.155f, y + 0.055f, 0.035f, 0.045f,
-                  glm::vec3(0.28f,0.20f,0.13f), 0.30f);
+        drawEnemyPart(rectangleShape_, x, y, -0.050f, 0.002f, 0.075f, 0.022f,
+                      glm::vec3(0.40f,0.22f,0.14f), 0.30f);
+        drawEnemyPart(circleShape_, x, y, -0.090f, 0.025f, 0.020f, 0.020f, skin);
+        drawEnemyPart(rectangleShape_, x, y, -0.115f, 0.075f, 0.085f, 0.014f,
+                      glm::vec3(0.48f,0.30f,0.15f), 0.30f);
+        drawEnemyPart(rectangleShape_, x, y, -0.155f, 0.055f, 0.035f, 0.045f,
+                      glm::vec3(0.28f,0.20f,0.13f), 0.30f);
         break;
     case EnemyType::MediumLowerRanged:
-        drawShape(rectangleShape_, x, y - 0.085f, 0.13f, 0.12f, glm::vec3(0.34f,0.25f,0.18f));
-        drawShape(circleShape_, x, y + 0.025f, 0.045f, 0.045f, skin);
-        drawShape(rectangleShape_, x, y + 0.025f, 0.09f, 0.022f, darkCloth);
-        drawShape(rectangleShape_, x - 0.04f, y - 0.16f, 0.05f, 0.07f, darkCloth, -0.3f);
-        drawShape(rectangleShape_, x + 0.04f, y - 0.16f, 0.05f, 0.07f, darkCloth, 0.3f);
-        drawShape(rectangleShape_, x - 0.09f, y - 0.10f, 0.12f, 0.025f, glm::vec3(0.42f,0.27f,0.12f));
-        drawShape(triangleShape_, x - 0.15f, y - 0.10f, 0.05f, 0.05f, glm::vec3(0.58f,0.54f,0.45f), -1.57f);
+        drawEnemyPart(rectangleShape_, x, y, 0, -0.085f, 0.13f, 0.12f, glm::vec3(0.34f,0.25f,0.18f));
+        drawEnemyPart(circleShape_, x, y, 0, 0.025f, 0.045f, 0.045f, skin);
+        drawEnemyPart(rectangleShape_, x, y, 0, 0.025f, 0.09f, 0.022f, darkCloth);
+        drawEnemyPart(rectangleShape_, x, y, -0.04f, -0.16f, 0.05f, 0.07f, darkCloth, -0.3f);
+        drawEnemyPart(rectangleShape_, x, y, 0.04f, -0.16f, 0.05f, 0.07f, darkCloth, 0.3f);
+        drawEnemyPart(rectangleShape_, x, y, -0.09f, -0.10f, 0.12f, 0.025f,
+                      glm::vec3(0.42f,0.27f,0.12f));
+        drawEnemyPart(triangleShape_, x, y, -0.15f, -0.10f, 0.05f, 0.05f,
+                      glm::vec3(0.58f,0.54f,0.45f), -1.57f);
         break;
     case EnemyType::HardMelee:
-        drawShape(rectangleShape_, x, y - 0.075f, 0.14f, 0.18f, glm::vec3(0.30f,0.22f,0.17f));
-        drawShape(circleShape_, x, y + 0.065f, 0.055f, 0.055f, skin);
-        drawShape(rectangleShape_, x, y + 0.105f, 0.13f, 0.035f, glm::vec3(0.24f,0.23f,0.20f));
-        drawShape(triangleShape_, x - 0.075f, y + 0.11f, 0.055f, 0.085f, glm::vec3(0.24f,0.23f,0.20f), -0.35f);
-        drawShape(triangleShape_, x + 0.075f, y + 0.11f, 0.055f, 0.085f, glm::vec3(0.24f,0.23f,0.20f), 0.35f);
-        drawShape(rectangleShape_, x - 0.04f, y - 0.17f, 0.04f, 0.10f, darkCloth);
-        drawShape(rectangleShape_, x + 0.04f, y - 0.17f, 0.04f, 0.10f, darkCloth);
-        drawShape(rectangleShape_, x - 0.12f, y - 0.015f, 0.14f, 0.04f, glm::vec3(0.62f,0.61f,0.56f), -0.25f);
-        drawShape(rectangleShape_, x - 0.055f, y - 0.005f, 0.04f, 0.055f, glm::vec3(0.34f,0.20f,0.11f), -0.25f);
+        drawEnemyPart(rectangleShape_, x, y, 0, -0.075f, 0.14f, 0.18f, glm::vec3(0.30f,0.22f,0.17f));
+        drawEnemyPart(circleShape_, x, y, 0, 0.065f, 0.055f, 0.055f, skin);
+        drawEnemyPart(rectangleShape_, x, y, 0, 0.105f, 0.13f, 0.035f, glm::vec3(0.24f,0.23f,0.20f));
+        drawEnemyPart(triangleShape_, x, y, -0.075f, 0.11f, 0.055f, 0.085f,
+                      glm::vec3(0.24f,0.23f,0.20f), -0.35f);
+        drawEnemyPart(triangleShape_, x, y, 0.075f, 0.11f, 0.055f, 0.085f,
+                      glm::vec3(0.24f,0.23f,0.20f), 0.35f);
+        drawEnemyPart(rectangleShape_, x, y, -0.04f, -0.17f, 0.04f, 0.10f, darkCloth);
+        drawEnemyPart(rectangleShape_, x, y, 0.04f, -0.17f, 0.04f, 0.10f, darkCloth);
+        drawEnemyPart(rectangleShape_, x, y, -0.12f, -0.015f, 0.14f, 0.04f,
+                      glm::vec3(0.62f,0.61f,0.56f), -0.25f);
+        drawEnemyPart(rectangleShape_, x, y, -0.055f, -0.005f, 0.04f, 0.055f,
+                      glm::vec3(0.34f,0.20f,0.11f), -0.25f);
         break;
     }
     currentDamageTint_ = 0.0f;
@@ -374,8 +393,9 @@ void Renderer::drawWorld(std::vector<Player>& players, const std::vector<Enemy>&
         const float jumpOffset = player.jumpTimer > 0.0f
             ? 0.20f * std::sin(jumpProgress * 3.14159265f) : 0.0f;
         drawPlayerCharacter(player.pos.x, player.pos.y, player.type, player.health,
-                            jumpOffset, player.ducking, player.attackAnimationTimer > 0.0f);
-        drawHealthBar(player.pos.x, player.pos.y + 0.155f + jumpOffset,
+                            jumpOffset, player.ducking, player.attackAnimationTimer > 0.0f,
+                            0.68f);
+        drawHealthBar(player.pos.x, player.pos.y + 0.135f + jumpOffset,
                       player.health, player.maximumHealth(), glm::vec3(0.22f,0.76f,0.24f));
     }
     if (!gameOver) {
@@ -383,7 +403,7 @@ void Renderer::drawWorld(std::vector<Player>& players, const std::vector<Enemy>&
             if (!enemy.alive) continue;
             const float enemyY = GameConfig::LANE_Y[enemy.lane];
             drawEnemyCharacter(enemy.pos.x, enemyY, enemy);
-            drawHealthBar(enemy.pos.x, enemyY + 0.205f, enemy.health,
+            drawHealthBar(enemy.pos.x, enemyY + 0.135f, enemy.health,
                           enemy.maximumHealth(), glm::vec3(0.88f,0.18f,0.12f));
         }
         for (const Projectile& projectile : enemyProjectiles) {
