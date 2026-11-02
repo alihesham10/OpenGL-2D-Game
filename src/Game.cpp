@@ -59,6 +59,14 @@ void Game::handleCursorPosition(double x, double y) {
     const glm::vec2 position = cursorToNdc(x, y);
     if (menu_.state() == MenuState::MainMenu) {
         menu_.setHoveredMainOption(menu_.mainMenuOptionAt(position.x, position.y));
+        menu_.setHoveredPauseOption(-1);
+        hoveredLane_ = -1;
+        hoveredPlayerCard_ = -1;
+        return;
+    }
+    if (menu_.state() == MenuState::Paused) {
+        menu_.setHoveredPauseOption(menu_.pauseMenuOptionAt(position.x, position.y));
+        menu_.setHoveredMainOption(-1);
         hoveredLane_ = -1;
         hoveredPlayerCard_ = -1;
         return;
@@ -91,6 +99,23 @@ void Game::handleMouseButton(int button, int action) {
             restartGame();
         } else if (option == 1) {
             glfwSetWindowShouldClose(window_, GLFW_TRUE);
+        }
+        return;
+    }
+    if (menu_.state() == MenuState::Paused) {
+        if (button != GLFW_MOUSE_BUTTON_LEFT || action != GLFW_PRESS) return;
+        double x, y;
+        glfwGetCursorPos(window_, &x, &y);
+        const glm::vec2 position = cursorToNdc(x, y);
+        const int option = menu_.pauseMenuOptionAt(position.x, position.y);
+        if (option == 0) {
+            paused_ = false;
+            menu_.clear();
+        } else if (option == 1) {
+            restartGame();
+        } else if (option == 2) {
+            restartGame();
+            menu_.showMainMenu();
         }
         return;
     }
@@ -127,6 +152,15 @@ void Game::handleKey(int key, int action) {
             restartGame();
         else if (action == GLFW_PRESS && key == GLFW_KEY_ESCAPE)
             glfwSetWindowShouldClose(window_, GLFW_TRUE);
+        return;
+    }
+    if (paused_) {
+        if (action == GLFW_PRESS && key == GLFW_KEY_ESCAPE) {
+            paused_ = false;
+            menu_.clear();
+        } else if (action == GLFW_PRESS && key == GLFW_KEY_R) {
+            restartGame();
+        }
         return;
     }
     if (action != GLFW_PRESS && action != GLFW_REPEAT) {
