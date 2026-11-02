@@ -1,2 +1,422 @@
-// Game definitions will be added when gameplay coordination is extracted
-// from main.cpp.
+#include "Game.h"
+
+#include "GameConfig.h"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdlib>
+#include <ctime>
+#include <iostream>
+
+namespace {
+float contactDistance(const Player& player, const Enemy& enemy) {
+    float distance = 0.5f * (player.bodyWidth() + enemy.bodyWidth());
+    if (player.type == PlayerType::Melee) distance += GameConfig::MELEE_WEAPON_REACH_NDC;
+    return distance;
+}
+}
+
+void Game::cursorPositionCallback(GLFWwindow* window, double x, double y) {
+    Game* game = static_cast<Game*>(glfwGetWindowUserPointer(window));
+    if (game) game->handleCursorPosition(x, y);
+}
+
+void Game::mouseButtonCallback(GLFWwindow* window, int button, int action, int) {
+    Game* game = static_cast<Game*>(glfwGetWindowUserPointer(window));
+    if (game) game->handleMouseButton(button, action);
+}
+
+void Game::keyCallback(GLFWwindow* window, int key, int, int action, int) {
+    Game* game = static_cast<Game*>(glfwGetWindowUserPointer(window));
+    if (game) game->handleKey(key, action);
+}
+
+glm::vec2 Game::cursorToNdc(double x, double y) {
+    return glm::vec2(static_cast<float>(2.0 * x / GameConfig::WINDOW_W - 1.0),
+                     static_cast<float>(1.0 - 2.0 * y / GameConfig::WINDOW_H));
+}
+
+int Game::laneFromY(float y) {
+    for (int i = 0; i < GameConfig::LANE_COUNT; ++i) {
+        const float laneTop = GameConfig::LANE_Y[i] + GameConfig::LANE_HEIGHT * 0.5f;
+        const float laneBottom = GameConfig::LANE_Y[i] - GameConfig::LANE_HEIGHT * 0.5f;
+        if (y >= laneBottom && y <= laneTop) return i;
+    }
+    return -1;
+}
+
+bool Game::playerCardIsUnlocked(int card) const {
+    return Player::cardIsUnlocked(card, coins_, coinsEarnedSinceStart_);
+}
+
+int Game::playerCostForCard(int card) const {
+    return Player::costForCard(card);
+}
+
+void Game::handleCursorPosition(double x, double y) {
+    const glm::vec2 position = cursorToNdc(x, y);
+    hoveredLane_ = laneFromY(position.y);
+    hoveredPlayerCard_ = -1;
+    for (int card = 0; card < 3; ++card) {
+        if (std::abs(position.x - GameConfig::PLAYER_CARD_X[card]) <= GameConfig::PLAYER_CARD_HALF_WIDTH &&
+            std::abs(position.y - GameConfig::PLAYER_CARD_Y) <= GameConfig::PLAYER_CARD_HALF_HEIGHT) {
+            if ((card == 0 && coins_ >= GameConfig::MELEE_PLAYER_COST) ||
+                (card == 1 && coinsEarnedSinceStart_ >= GameConfig::LONG_RANGE_UNLOCK_THRESHOLD &&
+                 coins_ >= GameConfig::LONG_RANGE_PLAYER_COST) ||
+                (card == 2 && coinsEarnedSinceStart_ >= GameConfig::DEFENSE_UNLOCK_THRESHOLD &&
+                 coins_ >= GameConfig::DEFENSE_PLAYER_COST)) {
+                hoveredPlayerCard_ = card;
+            }
+            break;
+        }
+    }
+}
+
+void Game::handleMouseButton(int button, int action) {
+    if (gameOver_ || gameWon_) return;
+    if (button != GLFW_MOUSE_BUTTON_LEFT || action != GLFW_PRESS) return;
+    double x, y;
+    glfwGetCursorPos(window_, &x, &y);
+    const glm::vec2 position = cursorToNdc(x, y);
+    for (int card = 0; card < 3; ++card) {
+        if (std::abs(position.x - GameConfig::PLAYER_CARD_X[card]) <= GameConfig::PLAYER_CARD_HALF_WIDTH &&
+            std::abs(position.y - GameConfig::PLAYER_CARD_Y) <= GameConfig::PLAYER_CARD_HALF_HEIGHT) {
+            if (playerCardIsUnlocked(card) && placementLane_ >= 0 && selectedLanes_[placementLane_])
+                purchaseAndPlacePlayer(card, placementLane_);
+            return;
+        }
+    }
+    const int lane = laneFromY(position.y);
+    if (lane >= 0) {
+        selectedLanes_[lane] = !selectedLanes_[lane];
+        if (selectedLanes_[lane]) {
+            placementLane_ = lane;
+        } else if (placementLane_ == lane) {
+            placementLane_ = -1;
+            for (int i = 0; i < GameConfig::LANE_COUNT; ++i) {
+                if (selectedLanes_[i]) placementLane_ = i;
+            }
+        }
+    }
+}
+
+void Game::handleKey(int key, int action) {
+    if (action != GLFW_PRESS && action != GLFW_REPEAT) {
+        if ((key == GLFW_KEY_S || key == GLFW_KEY_DOWN) && action == GLFW_RELEASE)
+            duckKeyHeld_ = false;
+        return;
+    }
+    if (key == GLFW_KEY_R && action == GLFW_PRESS) {
+        restartGame();
+        return;
+    }
+    if ((gameOver_ || gameWon_) && key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
+        restartGame();
+        return;
+    }
+    if (gameOver_ || gameWon_) return;
+    if (key == GLFW_KEY_S || key == GLFW_KEY_DOWN) {
+        duckKeyHeld_ = true;
+        return;
+    }
+    if (action != GLFW_PRESS) return;
+    if (key == GLFW_KEY_ESCAPE) {
+        paused_ = !paused_;
+        menu_.togglePause();
+    }
+    if (key == GLFW_KEY_UP || key == GLFW_KEY_W) {
+        for (Player& player : players_) {
+            if (player.alive && player.type != PlayerType::Defense && selectedLanes_[player.lane]) {
+                player.jumpTimer = GameConfig::JUMP_DURATION;
+                player.ducking = false;
+            }
+        }
+    }
+}
+
+void Game::purchaseAndPlacePlayer(int card, int lane) {
+    if (!playerCardIsUnlocked(card) || lane < 0 || lane >= GameConfig::LANE_COUNT) return;
+    const int cost = playerCostForCard(card);
+    if (coins_ < cost) return;
+    const PlayerType type = Player::typeForCard(card);
+    players_.emplace_back(type, glm::vec2(GameConfig::PLAYER_START_X, GameConfig::LANE_Y[lane]), lane);
+    coins_ -= cost;
+}
+
+void Game::spawnEnemy(EnemyType type) {
+    const int lane = std::rand() % GameConfig::LANE_COUNT;
+    enemies_.emplace_back(type, glm::vec2(0.90f, GameConfig::LANE_Y[lane]), lane);
+}
+
+void Game::defeatEnemy(Enemy& enemy) {
+    if (!enemy.alive) return;
+    enemy.alive = false;
+    enemy.engaged = false;
+    collectibles_.emplace_back(enemy.pos, enemy.lane, GameConfig::ENEMY_COIN_REWARD);
+}
+
+void Game::resetEnemies() {
+    enemies_.clear();
+    enemyProjectiles_.clear();
+    playerProjectiles_.clear();
+    collectibles_.clear();
+    waveManager_.reset();
+}
+
+void Game::resetPlayers() {
+    players_.clear();
+    selectedLanes_[0] = false;
+    selectedLanes_[1] = false;
+    selectedLanes_[2] = false;
+    placementLane_ = -1;
+    coinsEarnedSinceStart_ = 0;
+    duckKeyHeld_ = false;
+}
+
+void Game::restartGame() {
+    resetPlayers();
+    resetEnemies();
+    coins_ = GameConfig::STARTING_COINS;
+    gameOver_ = false;
+    gameWon_ = false;
+    paused_ = false;
+    menu_.clear();
+}
+
+void Game::update(float deltaTime) {
+    if (!paused_ && !gameOver_ && !gameWon_) updateCombat(deltaTime);
+}
+
+void Game::updateCombat(float deltaTime) {
+    int aliveEnemyCount = 0;
+    for (const Enemy& enemy : enemies_) if (enemy.alive) ++aliveEnemyCount;
+    EnemyType nextEnemyType;
+    if (waveManager_.update(deltaTime, aliveEnemyCount, nextEnemyType)) spawnEnemy(nextEnemyType);
+    if (waveManager_.isComplete() && aliveEnemyCount == 0) {
+        gameWon_ = true;
+        menu_.showGameWon();
+        return;
+    }
+
+    for (Player& player : players_) {
+        if (!player.alive) continue;
+        player.update(deltaTime,
+                      player.lane >= 0 && player.lane < GameConfig::LANE_COUNT && selectedLanes_[player.lane],
+                      duckKeyHeld_);
+        if (player.engagedEnemy >= 0 &&
+            (player.engagedEnemy >= static_cast<int>(enemies_.size()) || !enemies_[player.engagedEnemy].alive)) {
+            player.engagedEnemy = -1;
+            player.attackCooldown = 0.0f;
+        }
+        player.move(deltaTime);
+    }
+
+    for (Enemy& enemy : enemies_) {
+        if (!enemy.alive) continue;
+        if (!enemy.engaged) {
+            const float nextX = enemy.pos.x - 2.0f * enemy.speedPixelsPerSecond /
+                GameConfig::WINDOW_W * deltaTime;
+            bool waitingAtCombat = false;
+            for (const Player& player : players_) {
+                if (!player.alive || player.lane != enemy.lane) continue;
+                const float distance = contactDistance(player, enemy);
+                if (enemy.pos.x >= player.pos.x && nextX <= player.pos.x + distance) {
+                    enemy.pos.x = player.pos.x + distance;
+                    waitingAtCombat = true;
+                    break;
+                }
+            }
+            if (!waitingAtCombat) enemy.moveLeft(deltaTime);
+        }
+        if (enemy.pos.x <= GameConfig::HOME_BASE_X) {
+            gameOver_ = true;
+            menu_.showGameOver();
+            return;
+        }
+
+        const int defeatedPlayer = enemy.attack(players_, enemyProjectiles_, deltaTime);
+        if (defeatedPlayer >= 0) {
+            Player& player = players_[defeatedPlayer];
+            if (player.engagedEnemy >= 0 && player.engagedEnemy < static_cast<int>(enemies_.size()))
+                enemies_[player.engagedEnemy].engaged = false;
+            player.engagedEnemy = -1;
+        }
+    }
+
+    for (Projectile& projectile : enemyProjectiles_) {
+        if (!projectile.alive) continue;
+        const float previousX = projectile.pos.x;
+        projectile.update(deltaTime);
+        Player* firstHit = nullptr;
+        for (Player& player : players_) {
+            if (!player.alive || player.lane != projectile.lane) continue;
+            const float collisionDistance = 0.5f * player.bodyWidth();
+            const bool crossed = projectile.crossedTarget(previousX,
+                player.pos.x - collisionDistance, player.pos.x + collisionDistance);
+            if (crossed && !projectile.isAvoidedBy(player) &&
+                (!firstHit || player.pos.x > firstHit->pos.x)) firstHit = &player;
+        }
+        if (firstHit) {
+            firstHit->takeDamage(projectile.damage);
+            if (!firstHit->alive) {
+                if (firstHit->engagedEnemy >= 0 && firstHit->engagedEnemy < static_cast<int>(enemies_.size()))
+                    enemies_[firstHit->engagedEnemy].engaged = false;
+                firstHit->engagedEnemy = -1;
+            }
+            projectile.alive = false;
+        }
+        if (projectile.isOffscreen()) projectile.alive = false;
+    }
+    enemyProjectiles_.erase(std::remove_if(enemyProjectiles_.begin(), enemyProjectiles_.end(),
+        [](const Projectile& projectile) { return !projectile.alive; }), enemyProjectiles_.end());
+
+    for (Player& player : players_) {
+        if (!player.alive || player.type == PlayerType::Defense || player.engagedEnemy >= 0) continue;
+        int closestEnemy = -1;
+        float closestDistance = 100.0f;
+        for (int i = 0; i < static_cast<int>(enemies_.size()); ++i) {
+            Enemy& enemy = enemies_[i];
+            if (!enemy.alive || enemy.engaged || enemy.lane != player.lane) continue;
+            const float distance = std::abs(enemy.pos.x - player.pos.x);
+            if (distance <= contactDistance(player, enemy) && distance < closestDistance) {
+                closestDistance = distance;
+                closestEnemy = i;
+            }
+        }
+        if (closestEnemy >= 0) {
+            player.engagedEnemy = closestEnemy;
+            player.attackCooldown = 0.0f;
+            enemies_[closestEnemy].engaged = true;
+        }
+    }
+
+    for (Player& player : players_) {
+        if (!player.alive || player.engagedEnemy < 0) continue;
+        Enemy& enemy = enemies_[player.engagedEnemy];
+        if (!enemy.alive) {
+            player.engagedEnemy = -1;
+            continue;
+        }
+        if (player.attackEnemy(enemy, deltaTime)) {
+            defeatEnemy(enemy);
+            player.engagedEnemy = -1;
+            player.attackCooldown = 0.0f;
+        }
+    }
+
+    for (Player& player : players_)
+        player.fireAtNearestEnemy(enemies_, playerProjectiles_, deltaTime);
+
+    for (Projectile& projectile : playerProjectiles_) {
+        if (!projectile.alive) continue;
+        const float previousX = projectile.pos.x;
+        projectile.update(deltaTime);
+        Enemy* firstHit = nullptr;
+        for (Enemy& enemy : enemies_) {
+            if (!enemy.alive || enemy.lane != projectile.lane) continue;
+            const float collisionDistance = 0.5f * enemy.bodyWidth();
+            const bool crossed = projectile.crossedTarget(previousX,
+                enemy.pos.x - collisionDistance, enemy.pos.x + collisionDistance);
+            if (crossed && (!firstHit || enemy.pos.x < firstHit->pos.x)) firstHit = &enemy;
+        }
+        if (firstHit) {
+            firstHit->takeDamage(projectile.damage);
+            if (firstHit->health <= 0) {
+                defeatEnemy(*firstHit);
+                for (Player& player : players_) {
+                    if (player.engagedEnemy >= 0 && player.engagedEnemy < static_cast<int>(enemies_.size()) &&
+                        &enemies_[player.engagedEnemy] == firstHit) {
+                        player.engagedEnemy = -1;
+                        player.attackCooldown = 0.0f;
+                    }
+                }
+            }
+            projectile.alive = false;
+        }
+        if (projectile.isOffscreen()) projectile.alive = false;
+    }
+    playerProjectiles_.erase(std::remove_if(playerProjectiles_.begin(), playerProjectiles_.end(),
+        [](const Projectile& projectile) { return !projectile.alive; }), playerProjectiles_.end());
+
+    for (Collectible& collectible : collectibles_) {
+        if (!collectible.alive) continue;
+        for (const Player& player : players_) {
+            if (collectible.collectIfTouched(player)) {
+                coins_ += collectible.value;
+                coinsEarnedSinceStart_ += collectible.value;
+                break;
+            }
+        }
+    }
+    collectibles_.erase(std::remove_if(collectibles_.begin(), collectibles_.end(),
+        [](const Collectible& collectible) { return !collectible.alive; }), collectibles_.end());
+}
+
+void Game::render() {
+    renderer_.drawWorld(players_, enemies_, enemyProjectiles_, playerProjectiles_,
+                        collectibles_, selectedLanes_, hoveredLane_, gameOver_);
+    ui_.render(renderer_, coins_, coinsEarnedSinceStart_, hoveredPlayerCard_);
+    menu_.render(renderer_);
+}
+
+int Game::run() {
+    if (!glfwInit()) {
+        std::cerr << "Failed to initialize GLFW.\n";
+        return -1;
+    }
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+#ifdef __APPLE__
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+#endif
+
+    window_ = glfwCreateWindow(GameConfig::WINDOW_W, GameConfig::WINDOW_H,
+                               "Temple Defense - Starter", nullptr, nullptr);
+    if (!window_) {
+        std::cerr << "Could not create GLFW window.\n";
+        glfwTerminate();
+        return -1;
+    }
+    glfwMakeContextCurrent(window_);
+    glfwSwapInterval(1);
+    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
+        std::cerr << "Failed to initialize GLAD.\n";
+        glfwDestroyWindow(window_);
+        glfwTerminate();
+        return -1;
+    }
+    glViewport(0, 0, GameConfig::WINDOW_W, GameConfig::WINDOW_H);
+    glfwSetWindowUserPointer(window_, this);
+    glfwSetCursorPosCallback(window_, cursorPositionCallback);
+    glfwSetMouseButtonCallback(window_, mouseButtonCallback);
+    glfwSetKeyCallback(window_, keyCallback);
+    renderer_.initialize();
+    std::srand(static_cast<unsigned int>(std::time(nullptr)));
+    std::cout << "Controls: click lanes to toggle selection; W/Up jumps and hold S/Down to duck; Esc pauses; R resets.\n";
+
+    int displayedGameState = 0;
+    while (!glfwWindowShouldClose(window_)) {
+        const int gameState = gameWon_ ? 2 : (gameOver_ ? 1 : 0);
+        if (gameState != displayedGameState) {
+            if (gameWon_) glfwSetWindowTitle(window_, "Temple Defense - Victory! Press Space to restart");
+            else if (gameOver_) glfwSetWindowTitle(window_, "Temple Defense - Game Over. Press Space to restart");
+            else glfwSetWindowTitle(window_, "Temple Defense - Starter");
+            displayedGameState = gameState;
+        }
+        const float now = static_cast<float>(glfwGetTime());
+        const float deltaTime = std::min(now - lastFrameTime_, 0.05f);
+        lastFrameTime_ = now;
+        update(deltaTime);
+        renderer_.beginFrame();
+        render();
+        renderer_.present(window_);
+        glfwPollEvents();
+    }
+
+    renderer_.shutdown();
+    glfwDestroyWindow(window_);
+    window_ = nullptr;
+    glfwTerminate();
+    return 0;
+}

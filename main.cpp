@@ -1,1 +1,6 @@
-#include "src/main.cpp"
+#include "src/Game.h"
+
+int main() {
+    Game game;
+    return game.run();
+}

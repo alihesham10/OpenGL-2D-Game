@@ -1,2 +1,373 @@
-// Renderer definitions will be added when drawing code is extracted
-// from main.cpp.
+#include "Renderer.h"
+
+#include "GameConfig.h"
+
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+
+#include <cmath>
+#include <cstddef>
+#include <iostream>
+#include <vector>
+
+namespace {
+const char* vertexShaderSource = R"(
+#version 330 core
+layout (location = 0) in vec2 aPos;
+layout (location = 1) in vec3 aColor;
+uniform mat4 u_Transform;
+out vec3 vColor;
+void main() {
+    gl_Position = u_Transform * vec4(aPos, 0.0, 1.0);
+    vColor = aColor;
+}
+)";
+
+const char* fragmentShaderSource = R"(
+#version 330 core
+in vec3 vColor;
+out vec4 FragColor;
+uniform vec3 u_Tint;
+uniform float u_DamageTint;
+void main() {
+    vec3 baseColor = vColor * u_Tint;
+    vec3 damageColor = mix(baseColor, vec3(0.95, 0.05, 0.04), u_DamageTint);
+    FragColor = vec4(damageColor, 1.0);
+}
+)";
+
+float damageTintForHealth(int health, int maxHealth) {
+    float healthRatio = static_cast<float>(health) / static_cast<float>(maxHealth);
+    healthRatio = glm::clamp(healthRatio, 0.0f, 1.0f);
+    return 0.90f * (1.0f - healthRatio);
+}
+}
+
+bool Renderer::initialize() {
+    shaderProgram_ = createProgram();
+    transformLocation_ = glGetUniformLocation(shaderProgram_, "u_Transform");
+    damageTintLocation_ = glGetUniformLocation(shaderProgram_, "u_DamageTint");
+    createGeometry();
+    return shaderProgram_ != 0;
+}
+
+void Renderer::shutdown() {
+    glDeleteProgram(shaderProgram_);
+    glDeleteVertexArrays(1, &rectangleShape_.vao);
+    glDeleteBuffers(1, &rectangleShape_.vbo);
+    glDeleteVertexArrays(1, &triangleShape_.vao);
+    glDeleteBuffers(1, &triangleShape_.vbo);
+    glDeleteVertexArrays(1, &circleShape_.vao);
+    glDeleteBuffers(1, &circleShape_.vbo);
+}
+
+void Renderer::beginFrame() {
+    glClearColor(0.08f, 0.09f, 0.12f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+}
+
+void Renderer::present(GLFWwindow* window) {
+    glfwSwapBuffers(window);
+}
+
+GLuint Renderer::compileShader(GLenum type, const char* source) {
+    GLuint shader = glCreateShader(type);
+    glShaderSource(shader, 1, &source, nullptr);
+    glCompileShader(shader);
+    GLint ok = GL_FALSE;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &ok);
+    if (!ok) {
+        char log[1024];
+        glGetShaderInfoLog(shader, sizeof(log), nullptr, log);
+        std::cerr << "Shader compilation failed:\n" << log << '\n';
+    }
+    return shader;
+}
+
+GLuint Renderer::createProgram() {
+    GLuint vertexShader = compileShader(GL_VERTEX_SHADER, vertexShaderSource);
+    GLuint fragmentShader = compileShader(GL_FRAGMENT_SHADER, fragmentShaderSource);
+    GLuint program = glCreateProgram();
+    glAttachShader(program, vertexShader);
+    glAttachShader(program, fragmentShader);
+    glLinkProgram(program);
+    GLint ok = GL_FALSE;
+    glGetProgramiv(program, GL_LINK_STATUS, &ok);
+    if (!ok) {
+        char log[1024];
+        glGetProgramInfoLog(program, sizeof(log), nullptr, log);
+        std::cerr << "Shader link failed:\n" << log << '\n';
+    }
+    glDeleteShader(vertexShader);
+    glDeleteShader(fragmentShader);
+    return program;
+}
+
+Renderer::Shape Renderer::makeShape(const std::vector<Vertex>& vertices, GLenum mode) {
+    Shape shape;
+    shape.count = static_cast<GLsizei>(vertices.size());
+    shape.mode = mode;
+    glGenVertexArrays(1, &shape.vao);
+    glGenBuffers(1, &shape.vbo);
+    glBindVertexArray(shape.vao);
+    glBindBuffer(GL_ARRAY_BUFFER, shape.vbo);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, x));
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, r));
+    glEnableVertexAttribArray(1);
+    glBindVertexArray(0);
+    return shape;
+}
+
+void Renderer::addTriangle(std::vector<Vertex>& vertices,
+                           float x1, float y1, float x2, float y2, float x3, float y3,
+                           glm::vec3 color) {
+    vertices.push_back({x1, y1, color.r, color.g, color.b});
+    vertices.push_back({x2, y2, color.r, color.g, color.b});
+    vertices.push_back({x3, y3, color.r, color.g, color.b});
+}
+
+void Renderer::createGeometry() {
+    std::vector<Vertex> rectangle;
+    const glm::vec3 white(1.0f);
+    addTriangle(rectangle, -0.5f, -0.5f, 0.5f, -0.5f, 0.5f, 0.5f, white);
+    addTriangle(rectangle, -0.5f, -0.5f, 0.5f, 0.5f, -0.5f, 0.5f, white);
+    rectangleShape_ = makeShape(rectangle, GL_TRIANGLES);
+
+    std::vector<Vertex> triangle;
+    addTriangle(triangle, 0.0f, 0.5f, -0.5f, -0.5f, 0.5f, -0.5f, white);
+    triangleShape_ = makeShape(triangle, GL_TRIANGLES);
+
+    std::vector<Vertex> circle;
+    constexpr int segments = 36;
+    for (int i = 0; i < segments; ++i) {
+        float a1 = 2.0f * 3.14159265f * i / segments;
+        float a2 = 2.0f * 3.14159265f * (i + 1) / segments;
+        addTriangle(circle, 0.0f, 0.0f, std::cos(a1), std::sin(a1),
+                    std::cos(a2), std::sin(a2), white);
+    }
+    circleShape_ = makeShape(circle, GL_TRIANGLES);
+}
+
+void Renderer::drawShape(const Shape& shape, float x, float y, float sx, float sy,
+                         glm::vec3 color, float rotation) {
+    if (grayscaleDrawing_) {
+        float gray = glm::dot(color, glm::vec3(0.299f, 0.587f, 0.114f));
+        color = glm::vec3(gray);
+    }
+    glm::mat4 model(1.0f);
+    model = glm::translate(model, glm::vec3(x, y, 0.0f));
+    model = glm::rotate(model, rotation, glm::vec3(0, 0, 1));
+    model = glm::scale(model, glm::vec3(sx, sy, 1.0f));
+    glUniformMatrix4fv(transformLocation_, 1, GL_FALSE, glm::value_ptr(model));
+    const GLint tint = glGetUniformLocation(shaderProgram_, "u_Tint");
+    if (tint >= 0) glUniform3fv(tint, 1, &color[0]);
+    if (damageTintLocation_ >= 0) glUniform1f(damageTintLocation_, currentDamageTint_);
+    glBindVertexArray(shape.vao);
+    glDrawArrays(shape.mode, 0, shape.count);
+    glBindVertexArray(0);
+}
+
+void Renderer::drawRectangle(float x, float y, float width, float height, glm::vec3 color) {
+    drawShape(rectangleShape_, x, y, width, height, color);
+}
+
+void Renderer::drawCircle(float x, float y, float width, float height, glm::vec3 color) {
+    drawShape(circleShape_, x, y, width, height, color);
+}
+
+void Renderer::drawHealthBar(float x, float y, int health, int maxHealth, glm::vec3 fillColor) {
+    constexpr float segmentWidth = 0.022f;
+    constexpr float segmentGap = 0.004f;
+    constexpr float barHeight = 0.026f;
+    const float totalWidth = maxHealth * segmentWidth + (maxHealth - 1) * segmentGap;
+    const float firstCenter = x - totalWidth * 0.5f + segmentWidth * 0.5f;
+    for (int i = 0; i < maxHealth; ++i) {
+        const float segmentX = firstCenter + i * (segmentWidth + segmentGap);
+        drawShape(rectangleShape_, segmentX, y, segmentWidth, barHeight,
+                  glm::vec3(0.16f, 0.12f, 0.10f));
+        if (i < health) {
+            drawShape(rectangleShape_, segmentX, y, segmentWidth * 0.72f,
+                      barHeight * 0.62f, fillColor);
+        }
+    }
+}
+
+void Renderer::drawEnemyCharacter(float x, float y, const Enemy& enemy) {
+    currentDamageTint_ = damageTintForHealth(enemy.health, enemy.maximumHealth());
+    const glm::vec3 skin(0.66f, 0.40f, 0.24f);
+    const glm::vec3 darkCloth(0.20f, 0.12f, 0.11f);
+    switch (enemy.type) {
+    case EnemyType::EasyUpperRanged:
+        drawShape(rectangleShape_, x, y - 0.075f, 0.075f, 0.15f, glm::vec3(0.40f,0.18f,0.14f));
+        drawShape(circleShape_, x, y + 0.055f, 0.05f, 0.05f, skin);
+        drawShape(triangleShape_, x, y + 0.085f, 0.12f, 0.10f, darkCloth);
+        drawShape(rectangleShape_, x, y + 0.035f, 0.07f, 0.018f, glm::vec3(0.14f,0.10f,0.09f));
+        drawShape(rectangleShape_, x - 0.025f, y - 0.17f, 0.025f, 0.10f, darkCloth);
+        drawShape(rectangleShape_, x + 0.025f, y - 0.17f, 0.025f, 0.10f, darkCloth);
+        drawShape(rectangleShape_, x - 0.075f, y + 0.12f, 0.10f, 0.016f, glm::vec3(0.48f,0.30f,0.15f), 0.45f);
+        drawShape(circleShape_, x - 0.13f, y + 0.17f, 0.028f, 0.028f, glm::vec3(0.28f,0.27f,0.23f));
+        break;
+    case EnemyType::MediumLowerRanged:
+        drawShape(rectangleShape_, x, y - 0.085f, 0.13f, 0.12f, glm::vec3(0.34f,0.25f,0.18f));
+        drawShape(circleShape_, x, y + 0.025f, 0.045f, 0.045f, skin);
+        drawShape(rectangleShape_, x, y + 0.025f, 0.09f, 0.022f, darkCloth);
+        drawShape(rectangleShape_, x - 0.04f, y - 0.16f, 0.05f, 0.07f, darkCloth, -0.3f);
+        drawShape(rectangleShape_, x + 0.04f, y - 0.16f, 0.05f, 0.07f, darkCloth, 0.3f);
+        drawShape(rectangleShape_, x - 0.09f, y - 0.10f, 0.12f, 0.025f, glm::vec3(0.42f,0.27f,0.12f));
+        drawShape(triangleShape_, x - 0.15f, y - 0.10f, 0.05f, 0.05f, glm::vec3(0.58f,0.54f,0.45f), -1.57f);
+        break;
+    case EnemyType::HardMelee:
+        drawShape(rectangleShape_, x, y - 0.075f, 0.14f, 0.18f, glm::vec3(0.30f,0.22f,0.17f));
+        drawShape(circleShape_, x, y + 0.065f, 0.055f, 0.055f, skin);
+        drawShape(rectangleShape_, x, y + 0.105f, 0.13f, 0.035f, glm::vec3(0.24f,0.23f,0.20f));
+        drawShape(triangleShape_, x - 0.075f, y + 0.11f, 0.055f, 0.085f, glm::vec3(0.24f,0.23f,0.20f), -0.35f);
+        drawShape(triangleShape_, x + 0.075f, y + 0.11f, 0.055f, 0.085f, glm::vec3(0.24f,0.23f,0.20f), 0.35f);
+        drawShape(rectangleShape_, x - 0.04f, y - 0.17f, 0.04f, 0.10f, darkCloth);
+        drawShape(rectangleShape_, x + 0.04f, y - 0.17f, 0.04f, 0.10f, darkCloth);
+        drawShape(rectangleShape_, x - 0.12f, y - 0.015f, 0.14f, 0.04f, glm::vec3(0.62f,0.61f,0.56f), -0.25f);
+        drawShape(rectangleShape_, x - 0.055f, y - 0.005f, 0.04f, 0.055f, glm::vec3(0.34f,0.20f,0.11f), -0.25f);
+        break;
+    }
+    currentDamageTint_ = 0.0f;
+}
+
+void Renderer::drawPlayerPart(const Shape& shape, float x, float y, float offsetX,
+                              float offsetY, float sx, float sy, glm::vec3 color,
+                              float rotation, float jumpOffset, bool ducking) {
+    const float heightScale = ducking ? 0.65f : 1.0f;
+    const float poseOffset = jumpOffset - (ducking ? 0.025f : 0.0f);
+    drawShape(shape, x + offsetX * playerDrawingScale_,
+              y + (poseOffset + offsetY * heightScale) * playerDrawingScale_,
+              sx * playerDrawingScale_, sy * heightScale * playerDrawingScale_, color, rotation);
+}
+
+void Renderer::drawPlayerCharacter(float x, float y, PlayerType playerType, int health,
+                                   float jumpOffset, bool ducking, bool attacking,
+                                   float scale, bool grayscale) {
+    const float previousScale = playerDrawingScale_;
+    const bool previousGrayscale = grayscaleDrawing_;
+    playerDrawingScale_ = scale;
+    grayscaleDrawing_ = grayscale;
+    currentDamageTint_ = damageTintForHealth(health, playerType == PlayerType::Defense ? 7 : 5);
+    const glm::vec3 skin(0.82f,0.60f,0.40f);
+    const glm::vec3 darkCloth(0.22f,0.18f,0.15f);
+    const float swordRotation = attacking ? -0.95f : -0.35f;
+    switch (playerType) {
+    case PlayerType::Melee:
+        drawPlayerPart(rectangleShape_, x,y,0,-0.075f,0.075f,0.15f,glm::vec3(0.78f,0.68f,0.48f),0,jumpOffset,ducking);
+        drawPlayerPart(circleShape_, x,y,0,0.065f,0.05f,0.05f,skin,0,jumpOffset,ducking);
+        drawPlayerPart(rectangleShape_, x,y,0,0.105f,0.075f,0.022f,glm::vec3(0.16f,0.10f,0.06f),0,jumpOffset,ducking);
+        drawPlayerPart(rectangleShape_, x,y,-0.025f,-0.17f,0.025f,0.10f,darkCloth,0,jumpOffset,ducking);
+        drawPlayerPart(rectangleShape_, x,y,0.025f,-0.17f,0.025f,0.10f,darkCloth,0,jumpOffset,ducking);
+        drawPlayerPart(rectangleShape_, x,y,0.075f,-0.005f,0.105f,0.018f,glm::vec3(0.75f,0.76f,0.72f),swordRotation,jumpOffset,ducking);
+        drawPlayerPart(rectangleShape_, x,y,0.035f,-0.015f,0.035f,0.025f,glm::vec3(0.42f,0.24f,0.10f),swordRotation,jumpOffset,ducking);
+        break;
+    case PlayerType::Defense:
+        drawPlayerPart(rectangleShape_, x,y,0,-0.075f,0.14f,0.17f,glm::vec3(0.46f,0.50f,0.43f),0,jumpOffset,ducking);
+        drawPlayerPart(circleShape_, x,y,0,0.065f,0.052f,0.052f,skin,0,jumpOffset,ducking);
+        drawPlayerPart(rectangleShape_, x,y,0,0.105f,0.11f,0.035f,glm::vec3(0.53f,0.39f,0.18f),0,jumpOffset,ducking);
+        drawPlayerPart(rectangleShape_, x,y,-0.035f,-0.17f,0.035f,0.10f,darkCloth,0,jumpOffset,ducking);
+        drawPlayerPart(rectangleShape_, x,y,0.035f,-0.17f,0.035f,0.10f,darkCloth,0,jumpOffset,ducking);
+        drawPlayerPart(rectangleShape_, x,y,0.11f,-0.045f,0.075f,0.19f,glm::vec3(0.40f,0.25f,0.12f),0,jumpOffset,ducking);
+        drawPlayerPart(triangleShape_, x,y,0.11f,-0.16f,0.075f,0.07f,glm::vec3(0.40f,0.25f,0.12f),0,jumpOffset,ducking);
+        break;
+    case PlayerType::LongRange:
+        drawPlayerPart(rectangleShape_, x,y,0,-0.075f,0.065f,0.15f,glm::vec3(0.43f,0.47f,0.30f),0,jumpOffset,ducking);
+        drawPlayerPart(circleShape_, x,y,0,0.065f,0.048f,0.05f,skin,0,jumpOffset,ducking);
+        drawPlayerPart(triangleShape_, x,y,0,0.09f,0.11f,0.10f,glm::vec3(0.31f,0.34f,0.24f),0,jumpOffset,ducking);
+        drawPlayerPart(rectangleShape_, x,y,-0.022f,-0.17f,0.024f,0.10f,darkCloth,0,jumpOffset,ducking);
+        drawPlayerPart(rectangleShape_, x,y,0.022f,-0.17f,0.024f,0.10f,darkCloth,0,jumpOffset,ducking);
+        drawPlayerPart(rectangleShape_, x,y,0.09f,-0.025f,0.025f,0.19f,glm::vec3(0.48f,0.28f,0.12f),attacking?0.15f:-0.15f,jumpOffset,ducking);
+        drawPlayerPart(rectangleShape_, x,y,0.085f,-0.02f,0.105f,0.012f,glm::vec3(0.78f,0.70f,0.45f),0,jumpOffset,ducking);
+        break;
+    }
+    currentDamageTint_ = 0.0f;
+    playerDrawingScale_ = previousScale;
+    grayscaleDrawing_ = previousGrayscale;
+}
+
+void Renderer::drawPalmTree(float x, float groundY) {
+    const glm::vec3 leafColor(0.16f, 0.42f, 0.19f);
+    const float trunkHeight = 0.34f;
+    const float trunkCenterY = groundY + trunkHeight * 0.5f;
+    drawShape(rectangleShape_, x, trunkCenterY, 0.045f, trunkHeight, glm::vec3(0.48f,0.31f,0.16f), -0.12f);
+    const float crownY = groundY + trunkHeight;
+    drawShape(triangleShape_, x - 0.10f, crownY + 0.02f, 0.18f, 0.10f, leafColor, -1.10f);
+    drawShape(triangleShape_, x - 0.04f, crownY + 0.09f, 0.18f, 0.10f, leafColor, -0.55f);
+    drawShape(triangleShape_, x + 0.04f, crownY + 0.09f, 0.18f, 0.10f, leafColor, 0.55f);
+    drawShape(triangleShape_, x + 0.10f, crownY + 0.02f, 0.18f, 0.10f, leafColor, 1.10f);
+}
+
+void Renderer::drawTorch(float x, float y) {
+    drawShape(rectangleShape_, x, y - 0.045f, 0.035f, 0.16f, glm::vec3(0.35f,0.20f,0.11f));
+    drawShape(rectangleShape_, x, y + 0.035f, 0.055f, 0.025f, glm::vec3(0.70f,0.48f,0.22f));
+    drawShape(triangleShape_, x, y + 0.09f, 0.055f, 0.09f, glm::vec3(1.0f,0.42f,0.08f));
+    drawShape(triangleShape_, x, y + 0.08f, 0.025f, 0.055f, glm::vec3(1.0f,0.82f,0.20f));
+}
+
+void Renderer::drawEnvironment(const bool (&selectedLanes)[3], int hoveredLane) {
+    drawShape(rectangleShape_, 0,0.55f,2.0f,0.90f,glm::vec3(0.42f,0.70f,0.83f));
+    drawShape(triangleShape_, -0.35f,0.73f,0.72f,0.52f,glm::vec3(0.82f,0.66f,0.43f));
+    drawShape(triangleShape_, 0.22f,0.74f,0.82f,0.65f,glm::vec3(0.91f,0.75f,0.48f));
+    drawShape(rectangleShape_, 0,-0.48f,2.0f,1.05f,glm::vec3(0.78f,0.64f,0.40f));
+    drawShape(rectangleShape_, -0.88f,-0.05f,0.20f,0.70f,glm::vec3(0.77f,0.69f,0.54f));
+    drawShape(triangleShape_, -0.88f,0.34f,0.28f,0.20f,glm::vec3(0.61f,0.48f,0.31f));
+    for (int i = 0; i < 3; ++i)
+        drawShape(rectangleShape_, -0.94f + i * 0.06f,-0.09f,0.025f,0.48f,glm::vec3(0.56f,0.46f,0.34f));
+    drawShape(rectangleShape_, -0.88f,-0.36f,0.28f,0.06f,glm::vec3(0.51f,0.39f,0.26f));
+    drawPalmTree(0.80f, 0.045f);
+    drawTorch(0.92f, 0.18f);
+    drawTorch(0.92f, -0.73f);
+    for (int i = 0; i < 3; ++i) {
+        glm::vec3 laneColor(0.73f,0.57f,0.34f);
+        if (selectedLanes[i]) laneColor = glm::vec3(0.82f,0.66f,0.42f);
+        if (i == hoveredLane) laneColor = glm::vec3(0.90f,0.77f,0.52f);
+        drawShape(rectangleShape_,0.10f,GameConfig::LANE_Y[i],1.48f,GameConfig::LANE_HEIGHT,laneColor);
+        drawShape(rectangleShape_,0.10f,GameConfig::LANE_Y[i]-0.17f,1.48f,0.012f,glm::vec3(0.48f,0.37f,0.24f));
+        if (selectedLanes[i])
+            drawShape(triangleShape_,-0.68f,GameConfig::LANE_Y[i],0.045f,0.07f,glm::vec3(0.20f,0.75f,0.28f));
+    }
+}
+
+void Renderer::drawWorld(std::vector<Player>& players, const std::vector<Enemy>& enemies,
+                         const std::vector<Projectile>& enemyProjectiles,
+                         const std::vector<Projectile>& playerProjectiles,
+                         const std::vector<Collectible>& collectibles,
+                         const bool (&selectedLanes)[3], int hoveredLane, bool gameOver) {
+    glUseProgram(shaderProgram_);
+    drawEnvironment(selectedLanes, hoveredLane);
+    for (Player& player : players) {
+        if (!player.alive || player.lane < 0 || player.lane >= GameConfig::LANE_COUNT) continue;
+        player.pos.y = GameConfig::LANE_Y[player.lane];
+        const float jumpProgress = 1.0f - player.jumpTimer / GameConfig::JUMP_DURATION;
+        const float jumpOffset = player.jumpTimer > 0.0f
+            ? 0.20f * std::sin(jumpProgress * 3.14159265f) : 0.0f;
+        drawPlayerCharacter(player.pos.x, player.pos.y, player.type, player.health,
+                            jumpOffset, player.ducking, player.attackAnimationTimer > 0.0f);
+        drawHealthBar(player.pos.x, player.pos.y + 0.155f + jumpOffset,
+                      player.health, player.maximumHealth(), glm::vec3(0.22f,0.76f,0.24f));
+    }
+    if (!gameOver) {
+        for (const Enemy& enemy : enemies) {
+            if (!enemy.alive) continue;
+            const float enemyY = GameConfig::LANE_Y[enemy.lane];
+            drawEnemyCharacter(enemy.pos.x, enemyY, enemy);
+            drawHealthBar(enemy.pos.x, enemyY + 0.205f, enemy.health,
+                          enemy.maximumHealth(), glm::vec3(0.88f,0.18f,0.12f));
+        }
+        for (const Projectile& projectile : enemyProjectiles) {
+            const glm::vec3 color = projectile.height == ProjectileHeight::Upper
+                ? glm::vec3(0.95f,0.35f,0.12f) : glm::vec3(0.95f,0.78f,0.20f);
+            drawCircle(projectile.pos.x, projectile.pos.y, 0.035f, 0.035f, color);
+        }
+        for (const Projectile& projectile : playerProjectiles)
+            drawShape(triangleShape_, projectile.pos.x, projectile.pos.y, 0.045f,0.025f,glm::vec3(0.95f,0.88f,0.44f));
+    }
+    for (const Collectible& collectible : collectibles) {
+        if (!collectible.alive) continue;
+        drawCircle(collectible.pos.x, GameConfig::LANE_Y[collectible.lane], 0.035f,0.035f,glm::vec3(1.0f,0.78f,0.10f));
+        drawCircle(collectible.pos.x, GameConfig::LANE_Y[collectible.lane], 0.020f,0.020f,glm::vec3(0.90f,0.52f,0.05f));
+    }
+}

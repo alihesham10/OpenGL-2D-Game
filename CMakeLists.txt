@@ -12,6 +12,15 @@ find_package(OpenGL REQUIRED)
 
 add_executable(OpenGLStarter
     main.cpp
+    src/Game.cpp
+    src/Renderer.cpp
+    src/Player.cpp
+    src/Enemy.cpp
+    src/Projectile.cpp
+    src/Collectible.cpp
+    src/WaveManager.cpp
+    src/UI.cpp
+    src/Menu.cpp
     external/glad/glad.c
 )
 
