@@ -57,6 +57,12 @@ int Game::playerCostForCard(int card) const {
 
 void Game::handleCursorPosition(double x, double y) {
     const glm::vec2 position = cursorToNdc(x, y);
+    if (menu_.state() == MenuState::MainMenu) {
+        menu_.setHoveredMainOption(menu_.mainMenuOptionAt(position.x, position.y));
+        hoveredLane_ = -1;
+        hoveredPlayerCard_ = -1;
+        return;
+    }
     hoveredLane_ = laneFromY(position.y);
     hoveredPlayerCard_ = -1;
     for (int card = 0; card < 3; ++card) {
@@ -75,6 +81,19 @@ void Game::handleCursorPosition(double x, double y) {
 }
 
 void Game::handleMouseButton(int button, int action) {
+    if (menu_.state() == MenuState::MainMenu) {
+        if (button != GLFW_MOUSE_BUTTON_LEFT || action != GLFW_PRESS) return;
+        double x, y;
+        glfwGetCursorPos(window_, &x, &y);
+        const glm::vec2 position = cursorToNdc(x, y);
+        const int option = menu_.mainMenuOptionAt(position.x, position.y);
+        if (option == 0) {
+            restartGame();
+        } else if (option == 1) {
+            glfwSetWindowShouldClose(window_, GLFW_TRUE);
+        }
+        return;
+    }
     if (gameOver_ || gameWon_) return;
     if (button != GLFW_MOUSE_BUTTON_LEFT || action != GLFW_PRESS) return;
     double x, y;
@@ -103,6 +122,13 @@ void Game::handleMouseButton(int button, int action) {
 }
 
 void Game::handleKey(int key, int action) {
+    if (menu_.state() == MenuState::MainMenu) {
+        if (action == GLFW_PRESS && (key == GLFW_KEY_ENTER || key == GLFW_KEY_SPACE))
+            restartGame();
+        else if (action == GLFW_PRESS && key == GLFW_KEY_ESCAPE)
+            glfwSetWindowShouldClose(window_, GLFW_TRUE);
+        return;
+    }
     if (action != GLFW_PRESS && action != GLFW_REPEAT) {
         if ((key == GLFW_KEY_S || key == GLFW_KEY_DOWN) && action == GLFW_RELEASE)
             duckKeyHeld_ = false;
@@ -189,7 +215,8 @@ void Game::restartGame() {
 }
 
 void Game::update(float deltaTime) {
-    if (!paused_ && !gameOver_ && !gameWon_) updateCombat(deltaTime);
+    if (menu_.state() != MenuState::MainMenu && !paused_ && !gameOver_ && !gameWon_)
+        updateCombat(deltaTime);
 }
 
 void Game::updateCombat(float deltaTime) {
@@ -360,7 +387,8 @@ void Game::updateCombat(float deltaTime) {
 void Game::render() {
     renderer_.drawWorld(players_, enemies_, enemyProjectiles_, playerProjectiles_,
                         collectibles_, selectedLanes_, hoveredLane_, gameOver_);
-    ui_.render(renderer_, coins_, coinsEarnedSinceStart_, hoveredPlayerCard_);
+    if (menu_.state() != MenuState::MainMenu)
+        ui_.render(renderer_, coins_, coinsEarnedSinceStart_, hoveredPlayerCard_);
     menu_.render(renderer_);
 }
 
