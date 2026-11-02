@@ -46,7 +46,7 @@ int WaveManager::currentWaveSize() const { return complete_ ? 0 : waveSize(waveI
 int WaveManager::spawnedInCurrentWave() const { return spawnedInWave_; }
 
 int WaveManager::waveSize(int waveIndex) {
-    static constexpr int sizes[] = {4, 8, 12};
+    static constexpr int sizes[] = {3, 5, 10};
     return sizes[waveIndex < 0 ? 0 : (waveIndex > 2 ? 2 : waveIndex)];
 }
 

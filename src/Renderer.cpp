@@ -200,14 +200,24 @@ void Renderer::drawEnemyCharacter(float x, float y, const Enemy& enemy) {
     const glm::vec3 darkCloth(0.20f, 0.12f, 0.11f);
     switch (enemy.type) {
     case EnemyType::EasyUpperRanged:
-        drawShape(rectangleShape_, x, y - 0.075f, 0.075f, 0.15f, glm::vec3(0.40f,0.18f,0.14f));
-        drawShape(circleShape_, x, y + 0.055f, 0.05f, 0.05f, skin);
-        drawShape(triangleShape_, x, y + 0.085f, 0.12f, 0.10f, darkCloth);
-        drawShape(rectangleShape_, x, y + 0.035f, 0.07f, 0.018f, glm::vec3(0.14f,0.10f,0.09f));
-        drawShape(rectangleShape_, x - 0.025f, y - 0.17f, 0.025f, 0.10f, darkCloth);
-        drawShape(rectangleShape_, x + 0.025f, y - 0.17f, 0.025f, 0.10f, darkCloth);
-        drawShape(rectangleShape_, x - 0.075f, y + 0.12f, 0.10f, 0.016f, glm::vec3(0.48f,0.30f,0.15f), 0.45f);
-        drawShape(circleShape_, x - 0.13f, y + 0.17f, 0.028f, 0.028f, glm::vec3(0.28f,0.27f,0.23f));
+        // A hunched hooded scout wears a long tunic, unlike the upright player models.
+        drawShape(rectangleShape_, x + 0.008f, y - 0.080f, 0.105f, 0.17f,
+                  glm::vec3(0.35f,0.14f,0.12f), -0.12f);
+        drawShape(triangleShape_, x + 0.012f, y - 0.15f, 0.13f, 0.14f,
+                  glm::vec3(0.31f,0.12f,0.10f), 3.14159f);
+        drawShape(circleShape_, x - 0.012f, y + 0.045f, 0.048f, 0.048f, skin);
+        drawShape(triangleShape_, x - 0.012f, y + 0.078f, 0.13f, 0.11f, darkCloth);
+        drawShape(rectangleShape_, x - 0.012f, y + 0.025f, 0.07f, 0.018f, glm::vec3(0.14f,0.10f,0.09f));
+        drawShape(rectangleShape_, x - 0.035f, y - 0.18f, 0.055f, 0.07f, darkCloth, -0.12f);
+        drawShape(rectangleShape_, x + 0.032f, y - 0.18f, 0.055f, 0.07f, darkCloth, 0.10f);
+        // Its visible reaching arm and short sling form a held weapon silhouette.
+        drawShape(rectangleShape_, x - 0.050f, y + 0.002f, 0.075f, 0.022f,
+                  glm::vec3(0.40f,0.22f,0.14f), 0.30f);
+        drawShape(circleShape_, x - 0.090f, y + 0.025f, 0.020f, 0.020f, skin);
+        drawShape(rectangleShape_, x - 0.115f, y + 0.075f, 0.085f, 0.014f,
+                  glm::vec3(0.48f,0.30f,0.15f), 0.30f);
+        drawShape(rectangleShape_, x - 0.155f, y + 0.055f, 0.035f, 0.045f,
+                  glm::vec3(0.28f,0.20f,0.13f), 0.30f);
         break;
     case EnemyType::MediumLowerRanged:
         drawShape(rectangleShape_, x, y - 0.085f, 0.13f, 0.12f, glm::vec3(0.34f,0.25f,0.18f));
@@ -270,8 +280,9 @@ void Renderer::drawPlayerCharacter(float x, float y, PlayerType playerType, int 
         drawPlayerPart(rectangleShape_, x,y,0,0.105f,0.11f,0.035f,glm::vec3(0.53f,0.39f,0.18f),0,jumpOffset,ducking);
         drawPlayerPart(rectangleShape_, x,y,-0.035f,-0.17f,0.035f,0.10f,darkCloth,0,jumpOffset,ducking);
         drawPlayerPart(rectangleShape_, x,y,0.035f,-0.17f,0.035f,0.10f,darkCloth,0,jumpOffset,ducking);
-        drawPlayerPart(rectangleShape_, x,y,0.11f,-0.045f,0.075f,0.19f,glm::vec3(0.40f,0.25f,0.12f),0,jumpOffset,ducking);
-        drawPlayerPart(triangleShape_, x,y,0.11f,-0.16f,0.075f,0.07f,glm::vec3(0.40f,0.25f,0.12f),0,jumpOffset,ducking);
+        // A broad, tall shield reaches above the protected players' heads.
+        drawPlayerPart(rectangleShape_, x,y,0.075f,-0.025f,0.15f,0.30f,glm::vec3(0.40f,0.25f,0.12f),0,jumpOffset,ducking);
+        drawPlayerPart(triangleShape_, x,y,0.075f,-0.19f,0.15f,0.08f,glm::vec3(0.40f,0.25f,0.12f),0,jumpOffset,ducking);
         break;
     case PlayerType::LongRange:
         drawPlayerPart(rectangleShape_, x,y,0,-0.075f,0.065f,0.15f,glm::vec3(0.43f,0.47f,0.30f),0,jumpOffset,ducking);
@@ -290,36 +301,54 @@ void Renderer::drawPlayerCharacter(float x, float y, PlayerType playerType, int 
 
 void Renderer::drawPalmTree(float x, float groundY) {
     const glm::vec3 leafColor(0.16f, 0.42f, 0.19f);
-    const float trunkHeight = 0.34f;
+    const float trunkHeight = 0.25f;
     const float trunkCenterY = groundY + trunkHeight * 0.5f;
-    drawShape(rectangleShape_, x, trunkCenterY, 0.045f, trunkHeight, glm::vec3(0.48f,0.31f,0.16f), -0.12f);
+    drawShape(rectangleShape_, x, trunkCenterY, 0.034f, trunkHeight, glm::vec3(0.48f,0.31f,0.16f));
     const float crownY = groundY + trunkHeight;
-    drawShape(triangleShape_, x - 0.10f, crownY + 0.02f, 0.18f, 0.10f, leafColor, -1.10f);
-    drawShape(triangleShape_, x - 0.04f, crownY + 0.09f, 0.18f, 0.10f, leafColor, -0.55f);
-    drawShape(triangleShape_, x + 0.04f, crownY + 0.09f, 0.18f, 0.10f, leafColor, 0.55f);
-    drawShape(triangleShape_, x + 0.10f, crownY + 0.02f, 0.18f, 0.10f, leafColor, 1.10f);
+    drawShape(triangleShape_, x - 0.065f, crownY + 0.015f, 0.13f, 0.065f, leafColor, -0.95f);
+    drawShape(triangleShape_, x - 0.035f, crownY + 0.045f, 0.13f, 0.065f, leafColor, -0.45f);
+    drawShape(triangleShape_, x + 0.035f, crownY + 0.045f, 0.13f, 0.065f, leafColor, 0.45f);
+    drawShape(triangleShape_, x + 0.065f, crownY + 0.015f, 0.13f, 0.065f, leafColor, 0.95f);
 }
 
 void Renderer::drawTorch(float x, float y) {
-    drawShape(rectangleShape_, x, y - 0.045f, 0.035f, 0.16f, glm::vec3(0.35f,0.20f,0.11f));
-    drawShape(rectangleShape_, x, y + 0.035f, 0.055f, 0.025f, glm::vec3(0.70f,0.48f,0.22f));
-    drawShape(triangleShape_, x, y + 0.09f, 0.055f, 0.09f, glm::vec3(1.0f,0.42f,0.08f));
-    drawShape(triangleShape_, x, y + 0.08f, 0.025f, 0.055f, glm::vec3(1.0f,0.82f,0.20f));
+    drawShape(rectangleShape_, x, y - 0.034f, 0.025f, 0.12f, glm::vec3(0.35f,0.20f,0.11f));
+    drawShape(rectangleShape_, x, y + 0.025f, 0.040f, 0.018f, glm::vec3(0.70f,0.48f,0.22f));
+    drawShape(triangleShape_, x, y + 0.067f, 0.040f, 0.065f, glm::vec3(1.0f,0.42f,0.08f));
+    drawShape(triangleShape_, x, y + 0.060f, 0.018f, 0.040f, glm::vec3(1.0f,0.82f,0.20f));
 }
 
 void Renderer::drawEnvironment(const bool (&selectedLanes)[3], int hoveredLane) {
     drawShape(rectangleShape_, 0,0.55f,2.0f,0.90f,glm::vec3(0.42f,0.70f,0.83f));
-    drawShape(triangleShape_, -0.35f,0.73f,0.72f,0.52f,glm::vec3(0.82f,0.66f,0.43f));
-    drawShape(triangleShape_, 0.22f,0.74f,0.82f,0.65f,glm::vec3(0.91f,0.75f,0.48f));
     drawShape(rectangleShape_, 0,-0.48f,2.0f,1.05f,glm::vec3(0.78f,0.64f,0.40f));
-    drawShape(rectangleShape_, -0.88f,-0.05f,0.20f,0.70f,glm::vec3(0.77f,0.69f,0.54f));
-    drawShape(triangleShape_, -0.88f,0.34f,0.28f,0.20f,glm::vec3(0.61f,0.48f,0.31f));
+    // Sandy banks and river sit in the open background band above the top lane.
+    drawShape(rectangleShape_, -0.56f,0.22f,0.88f,0.34f,glm::vec3(0.78f,0.64f,0.40f));
+    drawShape(rectangleShape_, 0.56f,0.22f,0.88f,0.34f,glm::vec3(0.78f,0.64f,0.40f));
+    // Keep the three pyramids visible on the sandy bank to the river's right.
+    drawShape(triangleShape_, 0.43f,0.23f,0.52f,0.30f,glm::vec3(0.62f,0.46f,0.30f));
+    drawShape(triangleShape_, 0.66f,0.27f,0.62f,0.38f,glm::vec3(0.70f,0.52f,0.33f));
+    drawShape(triangleShape_, 0.88f,0.23f,0.48f,0.30f,glm::vec3(0.58f,0.42f,0.27f));
+    drawShape(rectangleShape_, 0.0f,0.22f,0.24f,0.34f,glm::vec3(0.17f,0.52f,0.65f));
+    drawShape(rectangleShape_, -0.055f,0.22f,0.018f,0.34f,glm::vec3(0.42f,0.73f,0.76f));
+    // Temple columns and walls span the complete height of the playable lanes.
+    drawShape(rectangleShape_, -0.88f,-0.485f,0.20f,0.97f,glm::vec3(0.77f,0.69f,0.54f));
+    drawShape(triangleShape_, -0.88f,0.055f,0.28f,0.16f,glm::vec3(0.61f,0.48f,0.31f));
     for (int i = 0; i < 3; ++i)
-        drawShape(rectangleShape_, -0.94f + i * 0.06f,-0.09f,0.025f,0.48f,glm::vec3(0.56f,0.46f,0.34f));
-    drawShape(rectangleShape_, -0.88f,-0.36f,0.28f,0.06f,glm::vec3(0.51f,0.39f,0.26f));
-    drawPalmTree(0.80f, 0.045f);
-    drawTorch(0.92f, 0.18f);
-    drawTorch(0.92f, -0.73f);
+        drawShape(rectangleShape_, -0.94f + i * 0.06f,-0.49f,0.025f,0.88f,glm::vec3(0.56f,0.46f,0.34f));
+    drawShape(rectangleShape_, -0.88f,-0.94f,0.28f,0.06f,glm::vec3(0.51f,0.39f,0.26f));
+    // Three palms stand along the river's left sandy bank.
+    drawPalmTree(-0.78f, 0.055f);
+    drawPalmTree(-0.57f, 0.055f);
+    drawPalmTree(-0.46f, 0.055f);
+    // Statue on the right bank; obelisk on the left bank with a pointed cap.
+    drawShape(rectangleShape_, 0.29f,-0.79f,0.13f,0.28f,glm::vec3(0.66f,0.56f,0.39f));
+    drawShape(circleShape_, 0.29f,-0.59f,0.10f,0.10f,glm::vec3(0.71f,0.61f,0.43f));
+    drawShape(rectangleShape_, 0.29f,-0.94f,0.20f,0.045f,glm::vec3(0.49f,0.39f,0.27f));
+    drawShape(rectangleShape_, -0.23f,0.27f,0.09f,0.42f,glm::vec3(0.43f,0.34f,0.25f));
+    drawShape(triangleShape_, -0.23f,0.525f,0.10f,0.10f,glm::vec3(0.51f,0.40f,0.28f));
+    drawShape(rectangleShape_, -0.23f,0.07f,0.15f,0.04f,glm::vec3(0.34f,0.27f,0.20f));
+    drawTorch(0.92f, 0.13f);
+    drawTorch(0.92f, GameConfig::LANE_Y[2]);
     for (int i = 0; i < 3; ++i) {
         glm::vec3 laneColor(0.73f,0.57f,0.34f);
         if (selectedLanes[i]) laneColor = glm::vec3(0.82f,0.66f,0.42f);

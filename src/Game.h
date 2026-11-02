@@ -8,6 +8,7 @@
 #include "Renderer.h"
 #include "UI.h"
 #include "WaveManager.h"
+#include "GameConfig.h"
 
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
@@ -16,6 +17,7 @@
 
 class Game {
 public:
+    Game();
     int run();
 
 private:

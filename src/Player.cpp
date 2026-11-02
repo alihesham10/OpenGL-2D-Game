@@ -66,7 +66,8 @@ void Player::fireAtNearestEnemy(const std::vector<Enemy>& enemies,
         }
     }
     if (targetEnemy < 0) return;
-    projectiles.emplace_back(glm::vec2(pos.x + 0.11f, GameConfig::LANE_Y[lane] + 0.015f),
+    projectiles.emplace_back(glm::vec2(pos.x + GameConfig::PLAYER_PROJECTILE_SPAWN_OFFSET_NDC,
+                                       GameConfig::LANE_Y[lane] + 0.015f),
                              lane, GameConfig::PLAYER_PROJECTILE_SPEED_PIXELS_PER_SECOND,
                              GameConfig::LONG_RANGE_PLAYER_DAMAGE, ProjectileOwner::Player);
     attackCooldown = GameConfig::LONG_RANGE_PLAYER_ATTACK_INTERVAL;

@@ -16,6 +16,8 @@ float contactDistance(const Player& player, const Enemy& enemy) {
 }
 }
 
+Game::Game() : waveManager_(GameConfig::ENEMY_SPAWN_INTERVAL) {}
+
 void Game::cursorPositionCallback(GLFWwindow* window, double x, double y) {
     Game* game = static_cast<Game*>(glfwGetWindowUserPointer(window));
     if (game) game->handleCursorPosition(x, y);
@@ -139,7 +141,10 @@ void Game::purchaseAndPlacePlayer(int card, int lane) {
     const int cost = playerCostForCard(card);
     if (coins_ < cost) return;
     const PlayerType type = Player::typeForCard(card);
-    players_.emplace_back(type, glm::vec2(GameConfig::PLAYER_START_X, GameConfig::LANE_Y[lane]), lane);
+    const float startX = type == PlayerType::Defense
+        ? GameConfig::PLAYER_START_X + GameConfig::DEFENSE_START_X_OFFSET_NDC
+        : GameConfig::PLAYER_START_X;
+    players_.emplace_back(type, glm::vec2(startX, GameConfig::LANE_Y[lane]), lane);
     coins_ -= cost;
 }
 

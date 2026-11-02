@@ -43,6 +43,59 @@ void UI::drawDigit(Renderer& renderer, int digit, float centerX, float centerY, 
     }
 }
 
+void UI::drawName(Renderer& renderer, int card, float centerX, float centerY,
+                  bool grayscale) const {
+    // 5-by-7 bitmap letters keep the button labels independent of any font library.
+    static const char* const names[] = {"HESHAM", "FAHMY", "SHIKO"};
+    static const char* const glyphs[26][7] = {
+        {"01110","10001","10001","11111","10001","10001","10001"}, // A
+        {"11110","10001","10001","11110","10001","10001","11110"}, // B
+        {"01111","10000","10000","10000","10000","10000","01111"}, // C
+        {"11110","10001","10001","10001","10001","10001","11110"}, // D
+        {"11111","10000","10000","11110","10000","10000","11111"}, // E
+        {"11111","10000","10000","11110","10000","10000","10000"}, // F
+        {"01111","10000","10000","10111","10001","10001","01111"}, // G
+        {"10001","10001","10001","11111","10001","10001","10001"}, // H
+        {"11111","00100","00100","00100","00100","00100","11111"}, // I
+        {"00111","00010","00010","00010","10010","10010","01100"}, // J
+        {"10001","10010","10100","11000","10100","10010","10001"}, // K
+        {"10000","10000","10000","10000","10000","10000","11111"}, // L
+        {"10001","11011","10101","10101","10001","10001","10001"}, // M
+        {"10001","11001","10101","10011","10001","10001","10001"}, // N
+        {"01110","10001","10001","10001","10001","10001","01110"}, // O
+        {"11110","10001","10001","11110","10000","10000","10000"}, // P
+        {"01110","10001","10001","10001","10101","10010","01101"}, // Q
+        {"11110","10001","10001","11110","10100","10010","10001"}, // R
+        {"01111","10000","10000","01110","00001","00001","11110"}, // S
+        {"11111","00100","00100","00100","00100","00100","00100"}, // T
+        {"10001","10001","10001","10001","10001","10001","01110"}, // U
+        {"10001","10001","10001","10001","10001","01010","00100"}, // V
+        {"10001","10001","10001","10101","10101","10101","01010"}, // W
+        {"10001","10001","01010","00100","01010","10001","10001"}, // X
+        {"10001","10001","01010","00100","00100","00100","00100"}, // Y
+        {"11111","00001","00010","00100","01000","10000","11111"}  // Z
+    };
+    if (card < 0 || card >= 3) return;
+    const std::string name = names[card];
+    constexpr float pixel = 0.0045f;
+    constexpr float letterStep = pixel * 6.0f;
+    constexpr float rowStep = pixel * 1.15f;
+    const float firstX = centerX - (name.size() - 1) * letterStep * 0.5f;
+    const float gray = 0.299f + 0.587f * 0.86f + 0.114f * 0.35f;
+    const glm::vec3 color = grayscale ? glm::vec3(gray) : glm::vec3(1.0f, 0.86f, 0.35f);
+    for (std::size_t letter = 0; letter < name.size(); ++letter) {
+        const int glyphIndex = name[letter] - 'A';
+        for (int row = 0; row < 7; ++row) {
+            for (int column = 0; column < 5; ++column) {
+                if (glyphs[glyphIndex][row][column] != '1') continue;
+                const float x = firstX + letter * letterStep + (column - 2) * pixel;
+                const float y = centerY + (3 - row) * rowStep;
+                renderer.drawRectangle(x, y, pixel * 0.82f, pixel * 0.82f, color);
+            }
+        }
+    }
+}
+
 void UI::drawCoinCount(Renderer& renderer, int coins) const {
     renderer.drawCircle(-0.84f, GameConfig::PLAYER_CARD_Y, 0.035f, 0.035f,
                         glm::vec3(1.0f, 0.78f, 0.10f));
@@ -67,6 +120,7 @@ void UI::drawPlayerCard(Renderer& renderer, int card, float centerX,
                                  type == PlayerType::Defense ? 7 : 5, 0.0f, false,
                                  false, scale, !unlocked);
     const int cost = Player::costForCard(card);
+    drawName(renderer, card, centerX, GameConfig::PLAYER_CARD_Y - 0.073f, !unlocked);
     drawDigit(renderer, cost / 10, centerX + 0.12f, GameConfig::PLAYER_CARD_Y, !unlocked);
     drawDigit(renderer, cost % 10, centerX + 0.175f, GameConfig::PLAYER_CARD_Y, !unlocked);
 }

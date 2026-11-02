@@ -4,7 +4,7 @@
 
 class WaveManager {
 public:
-    explicit WaveManager(float spawnInterval = 3.0f);
+    explicit WaveManager(float spawnInterval = 3.5f);
 
     void reset();
     bool update(float deltaTime, int aliveEnemyCount, EnemyType& spawnedType);
