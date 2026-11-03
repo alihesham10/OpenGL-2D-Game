@@ -30,7 +30,8 @@ void Player::update(float deltaTime, bool laneSelected, bool duckKeyHeld) {
 void Player::move(float deltaTime) {
     if (!alive || type == PlayerType::Defense || engagedEnemy >= 0) return;
     const float ndcSpeed = 2.0f * speedPixelsPerSecond / GameConfig::WINDOW_W;
-    pos.x = std::min(GameConfig::PLAYER_RIGHT_LIMIT, pos.x + ndcSpeed * deltaTime);
+    pos.x += ndcSpeed * deltaTime;
+    if (pos.x >= GameConfig::PLAYER_EXIT_X) alive = false;
 }
 
 void Player::takeDamage(int damage) {
