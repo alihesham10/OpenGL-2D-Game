@@ -310,7 +310,7 @@ void Game::update(float deltaTime) {
 
 void Game::updateCutscene(float deltaTime) {
     cutsceneElapsed_ += deltaTime;
-    if (cutsceneElapsed_ >= 10.0f) {
+    if (cutsceneElapsed_ >= 13.0f) {
         restartGame();
         return;
     }
@@ -518,18 +518,21 @@ void Game::render() {
                                cutsceneShikoShieldRaise_, cutsceneBossWeaponRotation_);
         if (cutsceneElapsed_ < 2.0f) {
             ui_.renderCutsceneDialogue(renderer_, "HESHAM",
-                "WE FINALLY FOUND THE TREASURE MAP!");
-        } else if (cutsceneElapsed_ < 5.0f) {
+                "WE FINALLY FOUND THE TREASURE!");
+        } else if (cutsceneElapsed_ < 4.5f) {
             ui_.renderCutsceneDialogue(renderer_, "BOSS",
-                "HAND OVER THAT MAP! WE WON'T LEAVE WITHOUT IT!");
+                "LEAVE IT! THAT TREASURE BELONGS TO US!");
         } else if (cutsceneElapsed_ < 6.5f) {
-            ui_.renderCutsceneDialogue(renderer_, "FAHMY",
+            ui_.renderCutsceneDialogue(renderer_, "AHMED FAHMY",
                 "YOU'LL HAVE TO GET THROUGH US FIRST!");
-        } else if (cutsceneElapsed_ < 8.0f) {
+        } else if (cutsceneElapsed_ < 8.5f) {
+            ui_.renderCutsceneDialogue(renderer_, "BOSS",
+                "ATTACK! GET THAT TREASURE!");
+        } else if (cutsceneElapsed_ < 11.0f) {
             ui_.renderCutsceneDialogue(renderer_, "SHIKO",
-                "THEN LET'S PROTECT IT TOGETHER!");
+                "LET'S PROTECT THE TREASURE TOGETHER");
         } else {
-            ui_.renderCutsceneDialogue(renderer_, "", "", "PROTECT THE TREASURE MAP!");
+            ui_.renderCutsceneDialogue(renderer_, "", "", "PROTECT THE TEMPLE!");
         }
         return;
     }

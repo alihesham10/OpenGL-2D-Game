@@ -212,12 +212,6 @@ void Renderer::drawEnemyPart(const Shape& shape, float centerX, float centerY,
 void Renderer::drawTreasureMap(float x, float y) {
     drawShape(rectangleShape_, x, y, 0.092f, 0.066f, glm::vec3(0.32f, 0.20f, 0.08f), -0.08f);
     drawShape(rectangleShape_, x, y, 0.080f, 0.054f, glm::vec3(0.94f, 0.82f, 0.52f), -0.08f);
-    drawShape(rectangleShape_, x - 0.014f, y + 0.008f, 0.030f, 0.004f,
-              glm::vec3(0.56f, 0.22f, 0.10f), -0.25f);
-    drawShape(rectangleShape_, x + 0.010f, y - 0.008f, 0.032f, 0.004f,
-              glm::vec3(0.56f, 0.22f, 0.10f), 0.28f);
-    drawShape(circleShape_, x + 0.015f, y + 0.014f, 0.009f, 0.009f,
-              glm::vec3(0.22f, 0.45f, 0.22f));
 }
 
 void Renderer::drawEnemyCharacter(float x, float y, const Enemy& enemy,
