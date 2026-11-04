@@ -9,6 +9,8 @@
 #include <iostream>
 
 namespace {
+Game* g_game = nullptr;
+
 float contactDistance(const Player& player, const Enemy& enemy) {
     float distance = 0.5f * (player.bodyWidth() + enemy.bodyWidth());
     if (player.type == PlayerType::Melee) distance += GameConfig::MELEE_WEAPON_REACH_NDC;
@@ -23,19 +25,12 @@ float smoothProgress(float value) {
 
 Game::Game() : waveManager_(GameConfig::ENEMY_SPAWN_INTERVAL) {}
 
-void Game::cursorPositionCallback(GLFWwindow* window, double x, double y) {
-    Game* game = static_cast<Game*>(glfwGetWindowUserPointer(window));
-    if (game) game->handleCursorPosition(x, y);
+void Game::mouseButtonCallback(GLFWwindow*, int button, int action, int) {
+    if (g_game) g_game->handleMouseButton(button, action);
 }
 
-void Game::mouseButtonCallback(GLFWwindow* window, int button, int action, int) {
-    Game* game = static_cast<Game*>(glfwGetWindowUserPointer(window));
-    if (game) game->handleMouseButton(button, action);
-}
-
-void Game::keyCallback(GLFWwindow* window, int key, int, int action, int) {
-    Game* game = static_cast<Game*>(glfwGetWindowUserPointer(window));
-    if (game) game->handleKey(key, action);
+void Game::keyCallback(GLFWwindow*, int key, int, int action, int) {
+    if (g_game) g_game->handleKey(key, action);
 }
 
 glm::vec2 Game::cursorToNdc(double x, double y) {
@@ -551,10 +546,6 @@ int Game::run() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-#ifdef __APPLE__
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-#endif
-
     window_ = glfwCreateWindow(GameConfig::WINDOW_W, GameConfig::WINDOW_H,
                                "Temple Defense - Starter", nullptr, nullptr);
     if (!window_) {
@@ -566,31 +557,24 @@ int Game::run() {
     glfwSwapInterval(1);
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
         std::cerr << "Failed to initialize GLAD.\n";
-        glfwDestroyWindow(window_);
         glfwTerminate();
         return -1;
     }
     glViewport(0, 0, GameConfig::WINDOW_W, GameConfig::WINDOW_H);
-    glfwSetWindowUserPointer(window_, this);
-    glfwSetCursorPosCallback(window_, cursorPositionCallback);
+    g_game = this;
     glfwSetMouseButtonCallback(window_, mouseButtonCallback);
     glfwSetKeyCallback(window_, keyCallback);
     renderer_.initialize();
     std::srand(static_cast<unsigned int>(std::time(nullptr)));
     std::cout << "Controls: click lanes to toggle selection; W/Up jumps and hold S/Down to duck; Esc pauses; R resets.\n";
 
-    int displayedGameState = 0;
     while (!glfwWindowShouldClose(window_)) {
-        const int gameState = gameWon_ ? 2 : (gameOver_ ? 1 : 0);
-        if (gameState != displayedGameState) {
-            if (gameWon_) glfwSetWindowTitle(window_, "Temple Defense - Victory! Press Space to restart");
-            else if (gameOver_) glfwSetWindowTitle(window_, "Temple Defense - Game Over. Press Space to restart");
-            else glfwSetWindowTitle(window_, "Temple Defense - Starter");
-            displayedGameState = gameState;
-        }
         const float now = static_cast<float>(glfwGetTime());
         const float deltaTime = std::min(now - lastFrameTime_, 0.05f);
         lastFrameTime_ = now;
+        double cursorX, cursorY;
+        glfwGetCursorPos(window_, &cursorX, &cursorY);
+        handleCursorPosition(cursorX, cursorY);
         update(deltaTime);
         renderer_.beginFrame();
         render();
@@ -599,8 +583,6 @@ int Game::run() {
     }
 
     renderer_.shutdown();
-    glfwDestroyWindow(window_);
-    window_ = nullptr;
     glfwTerminate();
     return 0;
 }

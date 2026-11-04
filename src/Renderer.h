@@ -37,11 +37,10 @@ public:
 
 private:
     struct Vertex { float x, y, r, g, b; };
-    struct Shape { GLuint vao = 0, vbo = 0; GLsizei count = 0; GLenum mode = GL_TRIANGLES; };
+    struct Shape { GLint first = 0; GLsizei count = 0; GLenum mode = GL_TRIANGLES; };
 
     GLuint compileShader(GLenum type, const char* source);
     GLuint createProgram();
-    Shape makeShape(const std::vector<Vertex>& vertices, GLenum mode);
     void addTriangle(std::vector<Vertex>& vertices, float x1, float y1,
                      float x2, float y2, float x3, float y3, glm::vec3 color);
     void createGeometry();
@@ -69,5 +68,6 @@ private:
     float sceneScale_ = 1.0f;
     float sceneOffsetX_ = 0.0f;
     float sceneOffsetY_ = 0.0f;
+    GLuint vao_ = 0, vbo_ = 0;
     Shape rectangleShape_, triangleShape_, circleShape_;
 };

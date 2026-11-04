@@ -5,8 +5,8 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+#include <algorithm>
 #include <cmath>
-#include <cstddef>
 #include <iostream>
 #include <vector>
 
@@ -27,10 +27,10 @@ const char* fragmentShaderSource = R"(
 #version 330 core
 in vec3 vColor;
 out vec4 FragColor;
-uniform vec3 u_Tint;
+uniform vec4 u_Tint;
 uniform float u_DamageTint;
 void main() {
-    vec3 baseColor = vColor * u_Tint;
+    vec3 baseColor = vColor * u_Tint.rgb;
     vec3 damageColor = mix(baseColor, vec3(0.95, 0.05, 0.04), u_DamageTint);
     FragColor = vec4(damageColor, 1.0);
 }
@@ -38,7 +38,7 @@ void main() {
 
 float damageTintForHealth(int health, int maxHealth) {
     float healthRatio = static_cast<float>(health) / static_cast<float>(maxHealth);
-    healthRatio = glm::clamp(healthRatio, 0.0f, 1.0f);
+    healthRatio = std::clamp(healthRatio, 0.0f, 1.0f);
     return 0.90f * (1.0f - healthRatio);
 }
 
@@ -54,12 +54,8 @@ bool Renderer::initialize() {
 
 void Renderer::shutdown() {
     glDeleteProgram(shaderProgram_);
-    glDeleteVertexArrays(1, &rectangleShape_.vao);
-    glDeleteBuffers(1, &rectangleShape_.vbo);
-    glDeleteVertexArrays(1, &triangleShape_.vao);
-    glDeleteBuffers(1, &triangleShape_.vbo);
-    glDeleteVertexArrays(1, &circleShape_.vao);
-    glDeleteBuffers(1, &circleShape_.vbo);
+    glDeleteVertexArrays(1, &vao_);
+    glDeleteBuffers(1, &vbo_);
 }
 
 void Renderer::beginFrame() {
@@ -104,23 +100,6 @@ GLuint Renderer::createProgram() {
     return program;
 }
 
-Renderer::Shape Renderer::makeShape(const std::vector<Vertex>& vertices, GLenum mode) {
-    Shape shape;
-    shape.count = static_cast<GLsizei>(vertices.size());
-    shape.mode = mode;
-    glGenVertexArrays(1, &shape.vao);
-    glGenBuffers(1, &shape.vbo);
-    glBindVertexArray(shape.vao);
-    glBindBuffer(GL_ARRAY_BUFFER, shape.vbo);
-    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, x));
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, r));
-    glEnableVertexAttribArray(1);
-    glBindVertexArray(0);
-    return shape;
-}
-
 void Renderer::addTriangle(std::vector<Vertex>& vertices,
                            float x1, float y1, float x2, float y2, float x3, float y3,
                            glm::vec3 color) {
@@ -130,31 +109,46 @@ void Renderer::addTriangle(std::vector<Vertex>& vertices,
 }
 
 void Renderer::createGeometry() {
-    std::vector<Vertex> rectangle;
+    std::vector<Vertex> vertices;
     const glm::vec3 white(1.0f);
-    addTriangle(rectangle, -0.5f, -0.5f, 0.5f, -0.5f, 0.5f, 0.5f, white);
-    addTriangle(rectangle, -0.5f, -0.5f, 0.5f, 0.5f, -0.5f, 0.5f, white);
-    rectangleShape_ = makeShape(rectangle, GL_TRIANGLES);
+    rectangleShape_.first = static_cast<GLint>(vertices.size());
+    addTriangle(vertices, -0.5f, -0.5f, 0.5f, -0.5f, 0.5f, 0.5f, white);
+    addTriangle(vertices, -0.5f, -0.5f, 0.5f, 0.5f, -0.5f, 0.5f, white);
+    rectangleShape_.count = static_cast<GLsizei>(vertices.size()) - rectangleShape_.first;
+    rectangleShape_.mode = GL_TRIANGLES;
 
-    std::vector<Vertex> triangle;
-    addTriangle(triangle, 0.0f, 0.5f, -0.5f, -0.5f, 0.5f, -0.5f, white);
-    triangleShape_ = makeShape(triangle, GL_TRIANGLES);
+    triangleShape_.first = static_cast<GLint>(vertices.size());
+    addTriangle(vertices, 0.0f, 0.5f, -0.5f, -0.5f, 0.5f, -0.5f, white);
+    triangleShape_.count = static_cast<GLsizei>(vertices.size()) - triangleShape_.first;
+    triangleShape_.mode = GL_TRIANGLES;
 
-    std::vector<Vertex> circle;
+    circleShape_.first = static_cast<GLint>(vertices.size());
     constexpr int segments = 36;
     for (int i = 0; i < segments; ++i) {
         float a1 = 2.0f * 3.14159265f * i / segments;
         float a2 = 2.0f * 3.14159265f * (i + 1) / segments;
-        addTriangle(circle, 0.0f, 0.0f, std::cos(a1), std::sin(a1),
+        addTriangle(vertices, 0.0f, 0.0f, std::cos(a1), std::sin(a1),
                     std::cos(a2), std::sin(a2), white);
     }
-    circleShape_ = makeShape(circle, GL_TRIANGLES);
+    circleShape_.count = static_cast<GLsizei>(vertices.size()) - circleShape_.first;
+    circleShape_.mode = GL_TRIANGLES;
+
+    glGenVertexArrays(1, &vao_);
+    glGenBuffers(1, &vbo_);
+    glBindVertexArray(vao_);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo_);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(2 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+    glBindVertexArray(0);
 }
 
 void Renderer::drawShape(const Shape& shape, float x, float y, float sx, float sy,
                          glm::vec3 color, float rotation) {
     if (grayscaleDrawing_) {
-        float gray = glm::dot(color, glm::vec3(0.299f, 0.587f, 0.114f));
+        float gray = 0.299f * color.r + 0.587f * color.g + 0.114f * color.b;
         color = glm::vec3(gray);
     }
     x = (x + sceneOffsetX_) * sceneScale_;
@@ -167,10 +161,10 @@ void Renderer::drawShape(const Shape& shape, float x, float y, float sx, float s
     model = glm::scale(model, glm::vec3(sx, sy, 1.0f));
     glUniformMatrix4fv(transformLocation_, 1, GL_FALSE, glm::value_ptr(model));
     const GLint tint = glGetUniformLocation(shaderProgram_, "u_Tint");
-    if (tint >= 0) glUniform3fv(tint, 1, &color[0]);
+    if (tint >= 0) glUniform4f(tint, color.r, color.g, color.b, 1.0f);
     if (damageTintLocation_ >= 0) glUniform1f(damageTintLocation_, currentDamageTint_);
-    glBindVertexArray(shape.vao);
-    glDrawArrays(shape.mode, 0, shape.count);
+    glBindVertexArray(vao_);
+    glDrawArrays(shape.mode, shape.first, shape.count);
     glBindVertexArray(0);
 }
 
@@ -435,8 +429,8 @@ void Renderer::drawCutscene(const std::vector<Player>& heroes,
                             bool heshamAttacking, bool fahmyAiming,
                             float shikoShieldRaise, float bossWeaponRotation) {
     const bool noSelectedLanes[GameConfig::LANE_COUNT] = {false, false, false};
-    sceneScale_ = 1.0f + 0.018f * glm::clamp(elapsed / 10.0f, 0.0f, 1.0f);
-    sceneOffsetX_ = -0.025f * glm::clamp(elapsed / 10.0f, 0.0f, 1.0f);
+    sceneScale_ = 1.0f + 0.018f * std::clamp(elapsed / 10.0f, 0.0f, 1.0f);
+    sceneOffsetX_ = -0.025f * std::clamp(elapsed / 10.0f, 0.0f, 1.0f);
     sceneOffsetY_ = 0.0f;
     glUseProgram(shaderProgram_);
     drawEnvironment(noSelectedLanes, -1);
