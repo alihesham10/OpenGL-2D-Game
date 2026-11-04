@@ -108,7 +108,6 @@ void UI::drawDigit(Renderer& renderer, int digit, float centerX, float centerY, 
 
 void UI::drawName(Renderer& renderer, int card, float centerX, float centerY,
                   bool grayscale) const {
-    // 5-by-7 bitmap letters keep the button labels independent of any font library.
     static const char* const names[] = {"HESHAM", "FAHMY", "SHIKO"};
     if (card < 0 || card >= 3) return;
     const std::string name = names[card];
