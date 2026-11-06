@@ -32,8 +32,7 @@ const char* glyph(char letter) {
     }
 }
 
-void drawText(Renderer& renderer, const std::string& text, float centerX, float centerY,
-              float pixelSize, glm::vec3 color) {
+void drawText(Renderer& renderer, const std::string& text, float centerX, float centerY, float pixelSize, glm::vec3 color) {
     const float letterStep = pixelSize * 6.0f;
     const float firstX = centerX - (static_cast<float>(text.size()) - 1.0f) * letterStep * 0.5f;
     for (std::size_t letterIndex = 0; letterIndex < text.size(); ++letterIndex) {
@@ -43,8 +42,7 @@ void drawText(Renderer& renderer, const std::string& text, float centerX, float 
             const char* rowStart = rows + row * 6;
             for (int column = 0; column < 5; ++column) {
                 if (rowStart[column] != '1') continue;
-                const float x = firstX + static_cast<float>(letterIndex) * letterStep +
-                    (column - 2) * pixelSize;
+                const float x = firstX + static_cast<float>(letterIndex) * letterStep + (column - 2) * pixelSize;
                 const float y = centerY + (3 - row) * pixelSize;
                 renderer.drawRectangle(x, y, pixelSize * 0.82f, pixelSize * 0.82f, color);
             }
@@ -68,8 +66,11 @@ void Menu::showCutscene() {
 }
 
 void Menu::setHoveredMainOption(int option) {
-    hoveredMainOption_ = state_ == MenuState::MainMenu && (option == 0 || option == 1)
-        ? option : -1;
+    if (state_ == MenuState::MainMenu && (option == 0 || option == 1)) {
+        hoveredMainOption_ = option;
+    } else {
+        hoveredMainOption_ = -1;
+    }
 }
 
 int Menu::mainMenuOptionAt(float x, float y) const {
@@ -80,8 +81,11 @@ int Menu::mainMenuOptionAt(float x, float y) const {
 }
 
 void Menu::setHoveredPauseOption(int option) {
-    hoveredPauseOption_ = state_ == MenuState::Paused && option >= 0 && option <= 2
-        ? option : -1;
+    if (state_ == MenuState::Paused && option >= 0 && option <= 2) {
+        hoveredPauseOption_ = option;
+    } else {
+        hoveredPauseOption_ = -1;
+    }
 }
 
 int Menu::pauseMenuOptionAt(float x, float y) const {
@@ -94,19 +98,26 @@ int Menu::pauseMenuOptionAt(float x, float y) const {
 
 void Menu::setHoveredResultOption(int option) {
     const bool showingResult = state_ == MenuState::GameOver || state_ == MenuState::GameWon;
-    hoveredResultOption_ = showingResult && (option == 0 || option == 1) ? option : -1;
+    if (showingResult && (option == 0 || option == 1)) {
+        hoveredResultOption_ = option;
+    } else {
+        hoveredResultOption_ = -1;
+    }
 }
 
 int Menu::resultMenuOptionAt(float x, float y) const {
-    if ((state_ != MenuState::GameOver && state_ != MenuState::GameWon) ||
-        x < -0.40f || x > 0.40f) return -1;
+    if ((state_ != MenuState::GameOver && state_ != MenuState::GameWon) || x < -0.40f || x > 0.40f) return -1;
     if (y >= -0.02f && y <= 0.14f) return 0;
     if (y >= -0.24f && y <= -0.08f) return 1;
     return -1;
 }
 
 void Menu::togglePause() {
-    state_ = state_ == MenuState::Paused ? MenuState::None : MenuState::Paused;
+    if (state_ == MenuState::Paused) {
+        state_ = MenuState::None;
+    } else {
+        state_ = MenuState::Paused;
+    }
 }
 
 void Menu::showGameOver() {
@@ -130,13 +141,12 @@ void Menu::render(Renderer& renderer) const {
         renderer.drawRectangle(0.0f, 0.0f, 1.88f, 1.78f, glm::vec3(0.09f, 0.11f, 0.13f));
         renderer.drawRectangle(0.0f, 0.0f, 1.78f, 1.68f, glm::vec3(0.16f, 0.20f, 0.20f));
         renderer.drawRectangle(0.0f, 0.57f, 0.92f, 0.014f, glm::vec3(0.74f, 0.52f, 0.22f));
-        drawText(renderer, "WARA2ET SHAFRA", 0.0f, 0.43f, 0.011f,
-                 glm::vec3(0.98f, 0.82f, 0.43f));
+        drawText(renderer, "WARA2ET SHAFRA", 0.0f, 0.43f, 0.011f, glm::vec3(0.98f, 0.82f, 0.43f));
 
-        const glm::vec3 startColor = hoveredMainOption_ == 0
-            ? glm::vec3(0.38f, 0.60f, 0.34f) : glm::vec3(0.23f, 0.39f, 0.27f);
-        const glm::vec3 exitColor = hoveredMainOption_ == 1
-            ? glm::vec3(0.68f, 0.36f, 0.24f) : glm::vec3(0.43f, 0.25f, 0.20f);
+        glm::vec3 startColor(0.23f, 0.39f, 0.27f);
+        if (hoveredMainOption_ == 0) startColor = glm::vec3(0.38f, 0.60f, 0.34f);
+        glm::vec3 exitColor(0.43f, 0.25f, 0.20f);
+        if (hoveredMainOption_ == 1) exitColor = glm::vec3(0.68f, 0.36f, 0.24f);
         renderer.drawRectangle(0.0f, 0.08f, 0.78f, 0.18f, startColor);
         renderer.drawRectangle(0.0f, -0.15f, 0.78f, 0.18f, exitColor);
         drawText(renderer, "START GAME", 0.0f, 0.08f, 0.008f, glm::vec3(1.0f, 0.94f, 0.78f));
@@ -160,8 +170,9 @@ void Menu::render(Renderer& renderer) const {
             glm::vec3(0.68f, 0.36f, 0.24f)
         };
         for (int option = 0; option < 3; ++option) {
-            renderer.drawRectangle(0.0f, buttonY[option], 0.82f, 0.17f,
-                hoveredPauseOption_ == option ? hoverColors[option] : normalColors[option]);
+            glm::vec3 buttonColor = normalColors[option];
+            if (hoveredPauseOption_ == option) buttonColor = hoverColors[option];
+            renderer.drawRectangle(0.0f, buttonY[option], 0.82f, 0.17f, buttonColor);
             drawText(renderer, labels[option], 0.0f, buttonY[option], 0.0075f,
                      glm::vec3(1.0f, 0.94f, 0.78f));
         }
@@ -173,12 +184,17 @@ void Menu::render(Renderer& renderer) const {
     const bool lost = state_ == MenuState::GameOver;
     if (won || lost) {
         renderer.drawRectangle(0.0f, 0.0f, 1.12f, 0.76f, glm::vec3(0.10f, 0.11f, 0.13f));
-        drawText(renderer, won ? "YOU WIN" : "YOU LOSE", 0.0f, 0.27f, 0.010f,
-                 won ? glm::vec3(0.35f, 0.90f, 0.40f) : glm::vec3(0.95f, 0.30f, 0.24f));
-        const glm::vec3 restartColor = hoveredResultOption_ == 0
-            ? glm::vec3(0.65f, 0.50f, 0.22f) : glm::vec3(0.43f, 0.34f, 0.18f);
-        const glm::vec3 mainMenuColor = hoveredResultOption_ == 1
-            ? glm::vec3(0.38f, 0.60f, 0.34f) : glm::vec3(0.23f, 0.39f, 0.27f);
+        const char* resultText = "YOU LOSE";
+        glm::vec3 resultTextColor(0.95f, 0.30f, 0.24f);
+        if (won) {
+            resultText = "YOU WIN";
+            resultTextColor = glm::vec3(0.35f, 0.90f, 0.40f);
+        }
+        drawText(renderer, resultText, 0.0f, 0.27f, 0.010f, resultTextColor);
+        glm::vec3 restartColor(0.43f, 0.34f, 0.18f);
+        if (hoveredResultOption_ == 0) restartColor = glm::vec3(0.65f, 0.50f, 0.22f);
+        glm::vec3 mainMenuColor(0.23f, 0.39f, 0.27f);
+        if (hoveredResultOption_ == 1) mainMenuColor = glm::vec3(0.38f, 0.60f, 0.34f);
         renderer.drawRectangle(0.0f, 0.06f, 0.82f, 0.17f, restartColor);
         renderer.drawRectangle(0.0f, -0.16f, 0.82f, 0.17f, mainMenuColor);
         drawText(renderer, "RESTART", 0.0f, 0.06f, 0.0075f, glm::vec3(1.0f, 0.94f, 0.78f));

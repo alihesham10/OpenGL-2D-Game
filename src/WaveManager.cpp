@@ -40,14 +40,27 @@ bool WaveManager::update(float deltaTime, int aliveEnemyCount, EnemyType& spawne
     return true;
 }
 
-bool WaveManager::isComplete() const { return complete_; }
-int WaveManager::currentWaveNumber() const { return complete_ ? 3 : waveIndex_ + 1; }
-int WaveManager::currentWaveSize() const { return complete_ ? 0 : waveSize(waveIndex_); }
-int WaveManager::spawnedInCurrentWave() const { return spawnedInWave_; }
+bool WaveManager::isComplete() const {
+    return complete_;
+}
+int WaveManager::currentWaveNumber() const {
+    if (complete_) return 3;
+    return waveIndex_ + 1;
+}
+int WaveManager::currentWaveSize() const {
+    if (complete_) return 0;
+    return waveSize(waveIndex_);
+}
+int WaveManager::spawnedInCurrentWave() const {
+    return spawnedInWave_;
+}
 
 int WaveManager::waveSize(int waveIndex) {
     static constexpr int sizes[] = {3, 5, 10};
-    return sizes[waveIndex < 0 ? 0 : (waveIndex > 2 ? 2 : waveIndex)];
+    int safeIndex = waveIndex;
+    if (safeIndex < 0) safeIndex = 0;
+    if (safeIndex > 2) safeIndex = 2;
+    return sizes[safeIndex];
 }
 
 EnemyType WaveManager::chooseEnemyType(int waveIndex, int enemyIndex) {
@@ -55,8 +68,8 @@ EnemyType WaveManager::chooseEnemyType(int waveIndex, int enemyIndex) {
     if (waveIndex == 1) {
         if (enemyIndex == 0) return EnemyType::EasyUpperRanged;
         if (enemyIndex == 1) return EnemyType::MediumLowerRanged;
-        return (std::rand() % 2 == 0)
-            ? EnemyType::EasyUpperRanged : EnemyType::MediumLowerRanged;
+        if (std::rand() % 2 == 0) return EnemyType::EasyUpperRanged;
+        return EnemyType::MediumLowerRanged;
     }
     if (enemyIndex == 0) return EnemyType::EasyUpperRanged;
     if (enemyIndex == 1) return EnemyType::MediumLowerRanged;

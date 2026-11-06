@@ -1,8 +1,6 @@
 #include "UI.h"
-
 #include "GameConfig.h"
 #include "Renderer.h"
-
 #include <algorithm>
 #include <string>
 
@@ -40,8 +38,7 @@ const char* const* bitmapGlyph(char letter) {
     return glyphs[letter - 'A'];
 }
 
-void drawBitmapText(Renderer& renderer, const std::string& text, float centerX,
-                    float centerY, float pixel, glm::vec3 color) {
+void drawBitmapText(Renderer& renderer, const std::string& text, float centerX, float centerY, float pixel, glm::vec3 color) {
     const float letterStep = pixel * 6.0f;
     const float firstX = centerX - (static_cast<float>(text.size()) - 1.0f) * letterStep * 0.5f;
     for (std::size_t letter = 0; letter < text.size(); ++letter) {
@@ -61,8 +58,7 @@ void drawBitmapText(Renderer& renderer, const std::string& text, float centerX,
         for (int row = 0; row < 7; ++row) {
             for (int column = 0; column < 5; ++column) {
                 if (rows[row][column] != '1') continue;
-                renderer.drawRectangle(xCenter + (column - 2) * pixel,
-                    centerY + (3 - row) * pixel, pixel * 0.82f, pixel * 0.82f, color);
+                renderer.drawRectangle(xCenter + (column - 2) * pixel, centerY + (3 - row) * pixel, pixel * 0.82f, pixel * 0.82f, color);
             }
         }
     }
@@ -84,7 +80,8 @@ void UI::drawDigit(Renderer& renderer, int digit, float centerX, float centerY, 
     };
     if (digit < 0 || digit > 9) return;
     const float gray = 0.299f + 0.587f * 0.86f + 0.114f * 0.35f;
-    const glm::vec3 color = grayscale ? glm::vec3(gray) : glm::vec3(1.0f, 0.86f, 0.35f);
+    glm::vec3 color(1.0f, 0.86f, 0.35f);
+    if (grayscale) color = glm::vec3(gray);
     const float horizontalWidth = 0.035f;
     const float horizontalHeight = 0.009f;
     const float verticalWidth = 0.009f;
@@ -95,47 +92,46 @@ void UI::drawDigit(Renderer& renderer, int digit, float centerX, float centerY, 
     const float leftX = centerX - 0.018f;
     const float rightX = centerX + 0.018f;
     const float segmentX[7] = {centerX, rightX, rightX, centerX, leftX, leftX, centerX};
-    const float segmentY[7] = {topY, centerY + 0.015f, centerY - 0.015f,
-                               bottomY, centerY - 0.015f, centerY + 0.015f, middleY};
+    const float segmentY[7] = {topY, centerY + 0.015f, centerY - 0.015f, bottomY, centerY - 0.015f, centerY + 0.015f, middleY};
     for (int segment = 0; segment < 7; ++segment) {
         if (!segments[digit][segment]) continue;
         const bool horizontal = segment == 0 || segment == 3 || segment == 6;
+        float segmentWidth = verticalWidth;
+        float segmentHeight = verticalHeight;
+        if (horizontal) {
+            segmentWidth = horizontalWidth;
+            segmentHeight = horizontalHeight;
+        }
         renderer.drawRectangle(segmentX[segment], segmentY[segment],
-                               horizontal ? horizontalWidth : verticalWidth,
-                               horizontal ? horizontalHeight : verticalHeight, color);
+                               segmentWidth, segmentHeight, color);
     }
 }
 
-void UI::drawName(Renderer& renderer, int card, float centerX, float centerY,
-                  bool grayscale) const {
+void UI::drawName(Renderer& renderer, int card, float centerX, float centerY, bool grayscale) const {
     static const char* const names[] = {"HESHAM", "FAHMY", "SHIKO"};
     if (card < 0 || card >= 3) return;
     const std::string name = names[card];
     constexpr float pixel = 0.0045f;
     const float gray = 0.299f + 0.587f * 0.86f + 0.114f * 0.35f;
-    const glm::vec3 color = grayscale ? glm::vec3(gray) : glm::vec3(1.0f, 0.86f, 0.35f);
+    glm::vec3 color(1.0f, 0.86f, 0.35f);
+    if (grayscale) color = glm::vec3(gray);
     drawBitmapText(renderer, name, centerX, centerY, pixel, color);
 }
 
-void UI::renderCutsceneDialogue(Renderer& renderer, const std::string& speaker,
-                                const std::string& dialogue, const std::string& title) const {
+void UI::renderCutsceneDialogue(Renderer& renderer, const std::string& speaker, const std::string& dialogue, const std::string& title) const {
     if (!title.empty()) {
         renderer.drawRectangle(0.0f, 0.57f, 1.78f, 0.20f, glm::vec3(0.08f, 0.09f, 0.10f));
         drawBitmapText(renderer, title, 0.0f, 0.57f, 0.0085f, glm::vec3(1.0f, 0.82f, 0.36f));
         return;
     }
     renderer.drawRectangle(0.0f, -0.81f, 1.78f, 0.22f, glm::vec3(0.08f, 0.09f, 0.10f));
-    drawBitmapText(renderer, speaker, -0.72f, -0.755f, 0.0055f,
-                   glm::vec3(1.0f, 0.78f, 0.28f));
-    drawBitmapText(renderer, dialogue, 0.0f, -0.84f, 0.0045f,
-                   glm::vec3(1.0f, 0.94f, 0.78f));
+    drawBitmapText(renderer, speaker, -0.72f, -0.755f, 0.0055f, glm::vec3(1.0f, 0.78f, 0.28f));
+    drawBitmapText(renderer, dialogue, 0.0f, -0.84f, 0.0045f, glm::vec3(1.0f, 0.94f, 0.78f));
 }
 
 void UI::drawCoinCount(Renderer& renderer, int coins) const {
-    renderer.drawCircle(-0.84f, GameConfig::PLAYER_CARD_Y, 0.035f, 0.035f,
-                        glm::vec3(1.0f, 0.78f, 0.10f));
-    renderer.drawCircle(-0.84f, GameConfig::PLAYER_CARD_Y, 0.020f, 0.020f,
-                        glm::vec3(0.90f, 0.52f, 0.05f));
+    renderer.drawCircle(-0.84f, GameConfig::PLAYER_CARD_Y, 0.035f, 0.035f, glm::vec3(1.0f, 0.78f, 0.10f));
+    renderer.drawCircle(-0.84f, GameConfig::PLAYER_CARD_Y, 0.020f, 0.020f, glm::vec3(0.90f, 0.52f, 0.05f));
     std::string digits = std::to_string(std::max(0, coins));
     if (digits.size() > 3) digits = digits.substr(digits.size() - 3);
     float startX = -0.76f + 0.065f * static_cast<float>(3 - digits.size());
@@ -145,28 +141,24 @@ void UI::drawCoinCount(Renderer& renderer, int coins) const {
     }
 }
 
-void UI::drawPlayerCard(Renderer& renderer, int card, float centerX,
-                        int coins, int coinsEarnedSinceStart,
-                        int hoveredPlayerCard) const {
+void UI::drawPlayerCard(Renderer& renderer, int card, float centerX, int coins, int coinsEarnedSinceStart, int hoveredPlayerCard) const {
     const PlayerType type = Player::typeForCard(card);
     const bool unlocked = Player::cardIsUnlocked(card, coins, coinsEarnedSinceStart);
-    const float scale = hoveredPlayerCard == card ? 0.52f : 0.48f;
-    renderer.drawPlayerCharacter(centerX - 0.04f, GameConfig::PLAYER_CARD_Y, type,
-                                 type == PlayerType::Defense ? 7 : 5, 0.0f, false,
-                                 false, scale, !unlocked);
+    float scale = 0.48f;
+    if (hoveredPlayerCard == card) scale = 0.52f;
+    int health = 5;
+    if (type == PlayerType::Defense) health = 7;
+    renderer.drawPlayerCharacter(centerX - 0.04f, GameConfig::PLAYER_CARD_Y, type, health, 0.0f, false, false, scale, !unlocked);
     const int cost = Player::costForCard(card);
     drawName(renderer, card, centerX, GameConfig::PLAYER_CARD_Y - 0.073f, !unlocked);
     drawDigit(renderer, cost / 10, centerX + 0.12f, GameConfig::PLAYER_CARD_Y, !unlocked);
     drawDigit(renderer, cost % 10, centerX + 0.175f, GameConfig::PLAYER_CARD_Y, !unlocked);
 }
 
-void UI::render(Renderer& renderer, int coins, int coinsEarnedSinceStart,
-                int hoveredPlayerCard) const {
-    renderer.drawRectangle(0.0f, GameConfig::PLAYER_CARD_Y, 1.90f, 0.20f,
-                           glm::vec3(0.12f, 0.13f, 0.15f));
+void UI::render(Renderer& renderer, int coins, int coinsEarnedSinceStart,int hoveredPlayerCard) const {
+    renderer.drawRectangle(0.0f, GameConfig::PLAYER_CARD_Y, 1.90f, 0.20f, glm::vec3(0.12f, 0.13f, 0.15f));
     for (int card = 0; card < 3; ++card) {
-        drawPlayerCard(renderer, card, GameConfig::PLAYER_CARD_X[card],
-                       coins, coinsEarnedSinceStart, hoveredPlayerCard);
+        drawPlayerCard(renderer, card, GameConfig::PLAYER_CARD_X[card], coins, coinsEarnedSinceStart, hoveredPlayerCard);
     }
     drawCoinCount(renderer, coins);
 }

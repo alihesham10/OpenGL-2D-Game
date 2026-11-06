@@ -1,7 +1,5 @@
 #include "Game.h"
-
 #include "GameConfig.h"
-
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -34,8 +32,7 @@ void Game::keyCallback(GLFWwindow*, int key, int, int action, int) {
 }
 
 glm::vec2 Game::cursorToNdc(double x, double y) {
-    return glm::vec2(static_cast<float>(2.0 * x / GameConfig::WINDOW_W - 1.0),
-                     static_cast<float>(1.0 - 2.0 * y / GameConfig::WINDOW_H));
+    return glm::vec2(static_cast<float>(2.0 * x / GameConfig::WINDOW_W - 1.0), static_cast<float>(1.0 - 2.0 * y / GameConfig::WINDOW_H));
 }
 
 int Game::laneFromY(float y) {
@@ -230,9 +227,10 @@ void Game::purchaseAndPlacePlayer(int card, int lane) {
     const int cost = playerCostForCard(card);
     if (coins_ < cost) return;
     const PlayerType type = Player::typeForCard(card);
-    const float startX = type == PlayerType::Defense
-        ? GameConfig::PLAYER_START_X + GameConfig::DEFENSE_START_X_OFFSET_NDC
-        : GameConfig::PLAYER_START_X;
+    float startX = GameConfig::PLAYER_START_X;
+    if (type == PlayerType::Defense) {
+        startX += GameConfig::DEFENSE_START_X_OFFSET_NDC;
+    }
     players_.emplace_back(type, glm::vec2(startX, GameConfig::LANE_Y[lane]), lane);
     coins_ -= cost;
 }
@@ -285,10 +283,10 @@ void Game::startIntroCutscene() {
     cutsceneHeroes_.emplace_back(PlayerType::Melee, glm::vec2(-0.52f, -0.32f), 1);
     cutsceneHeroes_.emplace_back(PlayerType::LongRange, glm::vec2(-0.25f, -0.32f), 1);
     cutsceneHeroes_.emplace_back(PlayerType::Defense, glm::vec2(0.02f, -0.32f), 1);
-
     cutsceneEnemies_.emplace_back(EnemyType::HardMelee, glm::vec2(1.18f, -0.32f), 1);
     cutsceneEnemies_.emplace_back(EnemyType::MediumLowerRanged, glm::vec2(1.40f, -0.32f), 1);
     cutsceneEnemies_.emplace_back(EnemyType::EasyUpperRanged, glm::vec2(1.62f, -0.32f), 1);
+
     for (Enemy& enemy : cutsceneEnemies_) enemy.alive = false;
 
     menu_.showCutscene();
@@ -313,32 +311,29 @@ void Game::updateCutscene(float deltaTime) {
     const float time = cutsceneElapsed_;
     const float idleBob = 0.008f * std::sin(time * 4.0f);
     const float heroStep = smoothProgress((time - 5.0f) / 1.3f);
-    const float alarm = smoothProgress((time - 2.0f) / 0.25f) *
-        (1.0f - smoothProgress((time - 2.25f) / 0.25f));
-    cutsceneHeroes_[0].pos = glm::vec2(-0.52f - 0.018f * alarm + 0.13f * heroStep,
-                                      -0.32f + idleBob);
-    cutsceneHeroes_[1].pos = glm::vec2(-0.25f - 0.014f * alarm + 0.01f * std::sin(time * 3.0f),
-                                      -0.32f + 0.006f * std::sin(time * 4.0f + 1.4f));
-    cutsceneHeroes_[2].pos = glm::vec2(0.02f - 0.012f * alarm + 0.08f * heroStep,
-                                      -0.32f + 0.006f * std::sin(time * 4.0f + 2.8f));
+    const float alarm = smoothProgress((time - 2.0f) / 0.25f) *(1.0f - smoothProgress((time - 2.25f) / 0.25f));
+    cutsceneHeroes_[0].pos = glm::vec2(-0.52f - 0.018f * alarm + 0.13f * heroStep, -0.32f + idleBob);
+    cutsceneHeroes_[1].pos = glm::vec2(-0.25f - 0.014f * alarm + 0.01f * std::sin(time * 3.0f), -0.32f + 0.006f * std::sin(time * 4.0f + 1.4f));
+    cutsceneHeroes_[2].pos = glm::vec2(0.02f - 0.012f * alarm + 0.08f * heroStep, -0.32f + 0.006f * std::sin(time * 4.0f + 2.8f));
 
     const float entrance = smoothProgress((time - 2.0f) / 3.0f);
     const float bossX = 1.18f - 0.58f * entrance;
     cutsceneEnemies_[0].alive = time >= 2.0f;
     cutsceneEnemies_[0].pos = glm::vec2(bossX, -0.32f + 0.005f * std::sin(time * 5.0f));
     cutsceneEnemies_[1].alive = time >= 2.35f;
-    cutsceneEnemies_[1].pos = glm::vec2(bossX + 0.20f,
-                                        -0.32f + 0.005f * std::sin(time * 5.0f + 1.0f));
+    cutsceneEnemies_[1].pos = glm::vec2(bossX + 0.20f, -0.32f + 0.005f * std::sin(time * 5.0f + 1.0f));
     cutsceneEnemies_[2].alive = time >= 2.70f;
-    cutsceneEnemies_[2].pos = glm::vec2(bossX + 0.40f,
-                                        -0.32f + 0.005f * std::sin(time * 5.0f + 2.0f));
+    cutsceneEnemies_[2].pos = glm::vec2(bossX + 0.40f, -0.32f + 0.005f * std::sin(time * 5.0f + 2.0f));
 
     const float preparation = smoothProgress((time - 5.0f) / 1.2f);
     cutsceneHeshamAttacking_ = time >= 5.0f && std::sin(time * 8.0f) > -0.15f;
     cutsceneFahmyAiming_ = time >= 5.0f;
     cutsceneShikoShieldRaise_ = 0.075f * preparation;
-    cutsceneBossWeaponRotation_ = -0.25f - 0.85f * preparation +
-        (time >= 5.0f ? 0.07f * std::sin(time * 5.0f) : 0.0f);
+    float bossWeaponMovement = 0.0f;
+    if (time >= 5.0f) {
+        bossWeaponMovement = 0.07f * std::sin(time * 5.0f);
+    }
+    cutsceneBossWeaponRotation_ = -0.25f - 0.85f * preparation + bossWeaponMovement;
 }
 
 void Game::updateCombat(float deltaTime) {
@@ -354,25 +349,19 @@ void Game::updateCombat(float deltaTime) {
 
     for (Player& player : players_) {
         if (!player.alive) continue;
-        player.update(deltaTime,
-                      player.lane >= 0 && player.lane < GameConfig::LANE_COUNT && selectedLanes_[player.lane],
-                      duckKeyHeld_);
-        if (player.engagedEnemy >= 0 &&
-            (player.engagedEnemy >= static_cast<int>(enemies_.size()) || !enemies_[player.engagedEnemy].alive)) {
+        player.update(deltaTime, player.lane >= 0 && player.lane < GameConfig::LANE_COUNT && selectedLanes_[player.lane], duckKeyHeld_);
+        if (player.engagedEnemy >= 0 && (player.engagedEnemy >= static_cast<int>(enemies_.size()) || !enemies_[player.engagedEnemy].alive)) {
             player.engagedEnemy = -1;
             player.attackCooldown = 0.0f;
         }
         if (player.type != PlayerType::Defense && player.engagedEnemy < 0) {
-            const float playerStep = 2.0f * player.speedPixelsPerSecond /
-                GameConfig::WINDOW_W * deltaTime;
+            const float playerStep = 2.0f * player.speedPixelsPerSecond / GameConfig::WINDOW_W * deltaTime;
             for (int i = 0; i < static_cast<int>(enemies_.size()); ++i) {
                 Enemy& enemy = enemies_[i];
-                if (!enemy.alive || enemy.engaged || enemy.lane != player.lane ||
-                    enemy.type != EnemyType::HardMelee || enemy.pos.x < player.pos.x) continue;
+                if (!enemy.alive || enemy.engaged || enemy.lane != player.lane || enemy.type != EnemyType::HardMelee || enemy.pos.x < player.pos.x) continue;
 
                 const float distance = contactDistance(player, enemy);
-                const float enemyNextX = enemy.pos.x - 2.0f * enemy.speedPixelsPerSecond /
-                    GameConfig::WINDOW_W * deltaTime;
+                const float enemyNextX = enemy.pos.x - 2.0f * enemy.speedPixelsPerSecond / GameConfig::WINDOW_W * deltaTime;
                 if (player.pos.x + playerStep + distance < enemyNextX) continue;
 
                 player.pos.x = enemy.pos.x - distance;
@@ -388,8 +377,7 @@ void Game::updateCombat(float deltaTime) {
     for (Enemy& enemy : enemies_) {
         if (!enemy.alive) continue;
         if (!enemy.engaged) {
-            const float nextX = enemy.pos.x - 2.0f * enemy.speedPixelsPerSecond /
-                GameConfig::WINDOW_W * deltaTime;
+            const float nextX = enemy.pos.x - 2.0f * enemy.speedPixelsPerSecond / GameConfig::WINDOW_W * deltaTime;
             bool waitingAtCombat = false;
             for (const Player& player : players_) {
                 if (!player.alive || player.lane != enemy.lane) continue;
@@ -425,10 +413,9 @@ void Game::updateCombat(float deltaTime) {
         for (Player& player : players_) {
             if (!player.alive || player.lane != projectile.lane) continue;
             const float collisionDistance = 0.5f * player.bodyWidth();
-            const bool crossed = projectile.crossedTarget(previousX,
-                player.pos.x - collisionDistance, player.pos.x + collisionDistance);
-            if (crossed && !projectile.isAvoidedBy(player) &&
-                (!firstHit || player.pos.x > firstHit->pos.x)) firstHit = &player;
+            const bool crossed = projectile.crossedTarget(previousX, player.pos.x - collisionDistance, player.pos.x + collisionDistance);
+            if (crossed && !projectile.isAvoidedBy(player) && (!firstHit || player.pos.x > firstHit->pos.x))
+                firstHit = &player;
         }
         if (firstHit) {
             firstHit->takeDamage(projectile.damage);
@@ -441,8 +428,8 @@ void Game::updateCombat(float deltaTime) {
         }
         if (projectile.isOffscreen()) projectile.alive = false;
     }
-    enemyProjectiles_.erase(std::remove_if(enemyProjectiles_.begin(), enemyProjectiles_.end(),
-        [](const Projectile& projectile) { return !projectile.alive; }), enemyProjectiles_.end());
+    enemyProjectiles_.erase(std::remove_if(enemyProjectiles_.begin(), enemyProjectiles_.end(), [](const Projectile& projectile) {
+        return !projectile.alive; }), enemyProjectiles_.end());
 
     for (Player& player : players_) {
         if (!player.alive || player.type == PlayerType::Defense || player.engagedEnemy >= 0) continue;
@@ -509,8 +496,8 @@ void Game::updateCombat(float deltaTime) {
         }
         if (projectile.isOffscreen()) projectile.alive = false;
     }
-    playerProjectiles_.erase(std::remove_if(playerProjectiles_.begin(), playerProjectiles_.end(),
-        [](const Projectile& projectile) { return !projectile.alive; }), playerProjectiles_.end());
+    playerProjectiles_.erase(std::remove_if(playerProjectiles_.begin(), playerProjectiles_.end(), [](const Projectile& projectile) {
+         return !projectile.alive; }), playerProjectiles_.end());
 
     for (Collectible& collectible : collectibles_) {
         if (!collectible.alive) continue;
@@ -522,8 +509,8 @@ void Game::updateCombat(float deltaTime) {
             }
         }
     }
-    collectibles_.erase(std::remove_if(collectibles_.begin(), collectibles_.end(),
-        [](const Collectible& collectible) { return !collectible.alive; }), collectibles_.end());
+    collectibles_.erase(std::remove_if(collectibles_.begin(), collectibles_.end(), [](const Collectible& collectible) {
+        return !collectible.alive; }), collectibles_.end());
 }
 
 void Game::render() {
@@ -551,8 +538,7 @@ void Game::render() {
         }
         return;
     }
-    renderer_.drawWorld(players_, enemies_, enemyProjectiles_, playerProjectiles_,
-                        collectibles_, selectedLanes_, hoveredLane_, gameOver_);
+    renderer_.drawWorld(players_, enemies_, enemyProjectiles_, playerProjectiles_, collectibles_, selectedLanes_, hoveredLane_, gameOver_);
     if (menu_.state() != MenuState::MainMenu)
         ui_.render(renderer_, coins_, coinsEarnedSinceStart_, hoveredPlayerCard_);
     menu_.render(renderer_);

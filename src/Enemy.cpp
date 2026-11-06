@@ -1,14 +1,11 @@
 #include "Enemy.h"
-
 #include "GameConfig.h"
 #include "Player.h"
 #include "Projectile.h"
-
 #include <cmath>
 
 Enemy::Enemy(EnemyType enemyType, glm::vec2 position, int enemyLane)
-    : type(enemyType), pos(position), lane(enemyLane), health(maximumHealth()),
-      alive(true), engaged(false), attackCooldown(0.0f) {
+    : type(enemyType), pos(position), lane(enemyLane), health(maximumHealth()), alive(true), engaged(false), attackCooldown(0.0f) {
     if (type == EnemyType::EasyUpperRanged)
         speedPixelsPerSecond = GameConfig::EASY_ENEMY_SPEED_PIXELS_PER_SECOND;
     else if (type == EnemyType::MediumLowerRanged)
@@ -26,8 +23,7 @@ void Enemy::takeDamage(int damage) {
     health -= damage;
 }
 
-int Enemy::attack(std::vector<Player>& players, std::vector<Projectile>& projectiles,
-                  float deltaTime) {
+int Enemy::attack(std::vector<Player>& players, std::vector<Projectile>& projectiles, float deltaTime) {
     Player* target = nullptr;
     float nearestDistance = 100.0f;
     int targetIndex = -1;
@@ -58,18 +54,24 @@ int Enemy::attack(std::vector<Player>& players, std::vector<Projectile>& project
     }
 
     const bool lowerAttack = type == EnemyType::MediumLowerRanged;
-    const float heightOffset = lowerAttack ? -0.12f : 0.12f;
+    float heightOffset = 0.12f;
+    int projectileDamage = GameConfig::EASY_ENEMY_DAMAGE;
+    ProjectileHeight projectileHeight = ProjectileHeight::Upper;
+    if (lowerAttack) {
+        heightOffset = -0.12f;
+        projectileDamage = GameConfig::MEDIUM_ENEMY_DAMAGE;
+        projectileHeight = ProjectileHeight::Lower;
+    }
     projectiles.emplace_back(glm::vec2(pos.x - 0.04f, GameConfig::LANE_Y[lane] + heightOffset),
-                             lane, projectileSpeed(),
-                             lowerAttack ? GameConfig::MEDIUM_ENEMY_DAMAGE : GameConfig::EASY_ENEMY_DAMAGE,
-                             ProjectileOwner::Enemy,
-                             lowerAttack ? ProjectileHeight::Lower : ProjectileHeight::Upper);
+                             lane, projectileSpeed(), projectileDamage,
+                             ProjectileOwner::Enemy, projectileHeight);
     attackCooldown = attackInterval();
     return -1;
 }
 
 int Enemy::maximumHealth() const {
-    return type == EnemyType::HardMelee ? 7 : 5;
+    if (type == EnemyType::HardMelee) return 7;
+    return 5;
 }
 
 float Enemy::bodyWidth() const {

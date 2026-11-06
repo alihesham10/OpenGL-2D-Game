@@ -6,8 +6,7 @@
 
 #include <algorithm>
 
-Player::Player(PlayerType playerType, glm::vec2 position, int playerLane)
-    : type(playerType), pos(position), lane(playerLane) {
+Player::Player(PlayerType playerType, glm::vec2 position, int playerLane) : type(playerType), pos(position), lane(playerLane) {
     if (type == PlayerType::Defense) {
         health = 7;
         speedPixelsPerSecond = GameConfig::DEFENSE_PLAYER_SPEED_PIXELS_PER_SECOND;
@@ -50,8 +49,7 @@ bool Player::attackEnemy(Enemy& enemy, float deltaTime) {
     return enemy.health <= 0;
 }
 
-void Player::fireAtNearestEnemy(const std::vector<Enemy>& enemies,
-                                std::vector<Projectile>& projectiles, float deltaTime) {
+void Player::fireAtNearestEnemy(const std::vector<Enemy>& enemies,std::vector<Projectile>& projectiles, float deltaTime) {
     if (!alive || type != PlayerType::LongRange) return;
     attackCooldown -= deltaTime;
     if (attackCooldown > 0.0f) return;
@@ -76,7 +74,8 @@ void Player::fireAtNearestEnemy(const std::vector<Enemy>& enemies,
 }
 
 int Player::maximumHealth() const {
-    return type == PlayerType::Defense ? 7 : 5;
+    if (type == PlayerType::Defense) return 7;
+    return 5;
 }
 
 float Player::bodyWidth() const {
@@ -100,10 +99,8 @@ int Player::costForCard(int card) {
 bool Player::cardIsUnlocked(int card, int coins, int coinsEarnedSinceStart) {
     if (card == 0) return coins >= GameConfig::MELEE_UNLOCK_THRESHOLD;
     if (card == 1)
-        return coinsEarnedSinceStart >= GameConfig::LONG_RANGE_UNLOCK_THRESHOLD &&
-               coins >= GameConfig::LONG_RANGE_UNLOCK_THRESHOLD;
+        return coinsEarnedSinceStart >= GameConfig::LONG_RANGE_UNLOCK_THRESHOLD && coins >= GameConfig::LONG_RANGE_UNLOCK_THRESHOLD;
     if (card == 2)
-        return coinsEarnedSinceStart >= GameConfig::DEFENSE_UNLOCK_THRESHOLD &&
-               coins >= GameConfig::DEFENSE_UNLOCK_THRESHOLD;
+        return coinsEarnedSinceStart >= GameConfig::DEFENSE_UNLOCK_THRESHOLD &&coins >= GameConfig::DEFENSE_UNLOCK_THRESHOLD;
     return false;
 }

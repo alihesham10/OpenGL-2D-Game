@@ -1,10 +1,8 @@
 #include "Renderer.h"
-
 #include "GameConfig.h"
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
-
 #include <algorithm>
 #include <cmath>
 #include <iostream>
@@ -100,9 +98,7 @@ GLuint Renderer::createProgram() {
     return program;
 }
 
-void Renderer::addTriangle(std::vector<Vertex>& vertices,
-                           float x1, float y1, float x2, float y2, float x3, float y3,
-                           glm::vec3 color) {
+void Renderer::addTriangle(std::vector<Vertex>& vertices,float x1, float y1, float x2, float y2, float x3, float y3,glm::vec3 color) {
     vertices.push_back({x1, y1, color.r, color.g, color.b});
     vertices.push_back({x2, y2, color.r, color.g, color.b});
     vertices.push_back({x3, y3, color.r, color.g, color.b});
@@ -145,8 +141,7 @@ void Renderer::createGeometry() {
     glBindVertexArray(0);
 }
 
-void Renderer::drawShape(const Shape& shape, float x, float y, float sx, float sy,
-                         glm::vec3 color, float rotation) {
+void Renderer::drawShape(const Shape& shape, float x, float y, float sx, float sy, glm::vec3 color, float rotation) {
     if (grayscaleDrawing_) {
         float gray = 0.299f * color.r + 0.587f * color.g + 0.114f * color.b;
         color = glm::vec3(gray);
@@ -189,14 +184,9 @@ void Renderer::drawHealthBar(float x, float y, int health, int maxHealth, glm::v
     }
 }
 
-void Renderer::drawEnemyPart(const Shape& shape, float centerX, float centerY,
-                            float offsetX, float offsetY, float width, float height,
-                            glm::vec3 color, float rotation) {
+void Renderer::drawEnemyPart(const Shape& shape, float centerX, float centerY,float offsetX, float offsetY, float width, float height,glm::vec3 color, float rotation) {
     constexpr float laneCharacterScale = 0.68f;
-    drawShape(shape, centerX + offsetX * laneCharacterScale,
-              centerY + offsetY * laneCharacterScale,
-              width * laneCharacterScale, height * laneCharacterScale,
-              color, rotation);
+    drawShape(shape, centerX + offsetX * laneCharacterScale,centerY + offsetY * laneCharacterScale,width * laneCharacterScale, height * laneCharacterScale,color, rotation);
 }
 
 void Renderer::drawTreasureMap(float x, float y) {
@@ -204,33 +194,24 @@ void Renderer::drawTreasureMap(float x, float y) {
     drawShape(rectangleShape_, x, y, 0.080f, 0.054f, glm::vec3(0.94f, 0.82f, 0.52f), -0.08f);
 }
 
-void Renderer::drawEnemyCharacter(float x, float y, const Enemy& enemy,
-                                  float hardWeaponRotation) {
+void Renderer::drawEnemyCharacter(float x, float y, const Enemy& enemy,float hardWeaponRotation) {
     currentDamageTint_ = damageTintForHealth(enemy.health, enemy.maximumHealth());
     const glm::vec3 skin(0.66f, 0.40f, 0.24f);
     const glm::vec3 darkCloth(0.20f, 0.12f, 0.11f);
     switch (enemy.type) {
     case EnemyType::EasyUpperRanged:
 
-    drawEnemyPart(rectangleShape_, x, y, 0.008f, -0.080f, 0.105f, 0.17f,
-                      glm::vec3(0.35f,0.14f,0.12f), -0.12f);
-        drawEnemyPart(triangleShape_, x, y, 0.012f, -0.15f, 0.13f, 0.14f,
-                      glm::vec3(0.31f,0.12f,0.10f), 3.14159f);
+    drawEnemyPart(rectangleShape_, x, y, 0.008f, -0.080f, 0.105f, 0.17f,glm::vec3(0.35f,0.14f,0.12f), -0.12f);
+        drawEnemyPart(triangleShape_, x, y, 0.012f, -0.15f, 0.13f, 0.14f,glm::vec3(0.31f,0.12f,0.10f), 3.14159f);
         drawEnemyPart(circleShape_, x, y, -0.012f, 0.045f, 0.048f, 0.048f, skin);
         drawEnemyPart(triangleShape_, x, y, -0.012f, 0.078f, 0.13f, 0.11f, darkCloth);
-        drawEnemyPart(rectangleShape_, x, y, -0.012f, 0.025f, 0.07f, 0.018f,
-                      glm::vec3(0.14f,0.10f,0.09f));
-        drawEnemyPart(rectangleShape_, x, y, -0.035f, -0.18f, 0.055f, 0.07f,
-                      darkCloth, -0.12f);
-        drawEnemyPart(rectangleShape_, x, y, 0.032f, -0.18f, 0.055f, 0.07f,
-                      darkCloth, 0.10f);
-        drawEnemyPart(rectangleShape_, x, y, -0.050f, 0.002f, 0.075f, 0.022f,
-                      glm::vec3(0.40f,0.22f,0.14f), 0.30f);
+        drawEnemyPart(rectangleShape_, x, y, -0.012f, 0.025f, 0.07f, 0.018f,glm::vec3(0.14f,0.10f,0.09f));
+        drawEnemyPart(rectangleShape_, x, y, -0.035f, -0.18f, 0.055f, 0.07f,darkCloth, -0.12f);
+        drawEnemyPart(rectangleShape_, x, y, 0.032f, -0.18f, 0.055f, 0.07f,darkCloth, 0.10f);
+        drawEnemyPart(rectangleShape_, x, y, -0.050f, 0.002f, 0.075f, 0.022f,glm::vec3(0.40f,0.22f,0.14f), 0.30f);
         drawEnemyPart(circleShape_, x, y, -0.090f, 0.025f, 0.020f, 0.020f, skin);
-        drawEnemyPart(rectangleShape_, x, y, -0.115f, 0.075f, 0.085f, 0.014f,
-                      glm::vec3(0.48f,0.30f,0.15f), 0.30f);
-        drawEnemyPart(rectangleShape_, x, y, -0.155f, 0.055f, 0.035f, 0.045f,
-                      glm::vec3(0.28f,0.20f,0.13f), 0.30f);
+        drawEnemyPart(rectangleShape_, x, y, -0.115f, 0.075f, 0.085f, 0.014f,glm::vec3(0.48f,0.30f,0.15f), 0.30f);
+        drawEnemyPart(rectangleShape_, x, y, -0.155f, 0.055f, 0.035f, 0.045f,glm::vec3(0.28f,0.20f,0.13f), 0.30f);
         break;
     case EnemyType::MediumLowerRanged:
         drawEnemyPart(rectangleShape_, x, y, 0, -0.085f, 0.13f, 0.12f, glm::vec3(0.34f,0.25f,0.18f));
@@ -238,52 +219,46 @@ void Renderer::drawEnemyCharacter(float x, float y, const Enemy& enemy,
         drawEnemyPart(rectangleShape_, x, y, 0, 0.025f, 0.09f, 0.022f, darkCloth);
         drawEnemyPart(rectangleShape_, x, y, -0.04f, -0.16f, 0.05f, 0.07f, darkCloth, -0.3f);
         drawEnemyPart(rectangleShape_, x, y, 0.04f, -0.16f, 0.05f, 0.07f, darkCloth, 0.3f);
-        drawEnemyPart(rectangleShape_, x, y, -0.09f, -0.10f, 0.12f, 0.025f,
-                      glm::vec3(0.42f,0.27f,0.12f));
-        drawEnemyPart(triangleShape_, x, y, -0.15f, -0.10f, 0.05f, 0.05f,
-                      glm::vec3(0.58f,0.54f,0.45f), -1.57f);
+        drawEnemyPart(rectangleShape_, x, y, -0.09f, -0.10f, 0.12f, 0.025f,glm::vec3(0.42f,0.27f,0.12f));
+        drawEnemyPart(triangleShape_, x, y, -0.15f, -0.10f, 0.05f, 0.05f,glm::vec3(0.58f,0.54f,0.45f), -1.57f);
         break;
     case EnemyType::HardMelee:
         drawEnemyPart(rectangleShape_, x, y, 0, -0.075f, 0.14f, 0.18f, glm::vec3(0.30f,0.22f,0.17f));
         drawEnemyPart(circleShape_, x, y, 0, 0.065f, 0.055f, 0.055f, skin);
         drawEnemyPart(rectangleShape_, x, y, 0, 0.105f, 0.13f, 0.035f, glm::vec3(0.24f,0.23f,0.20f));
-        drawEnemyPart(triangleShape_, x, y, -0.075f, 0.11f, 0.055f, 0.085f,
-                      glm::vec3(0.24f,0.23f,0.20f), -0.35f);
-        drawEnemyPart(triangleShape_, x, y, 0.075f, 0.11f, 0.055f, 0.085f,
-                      glm::vec3(0.24f,0.23f,0.20f), 0.35f);
+        drawEnemyPart(triangleShape_, x, y, -0.075f, 0.11f, 0.055f, 0.085f,glm::vec3(0.24f,0.23f,0.20f), -0.35f);
+        drawEnemyPart(triangleShape_, x, y, 0.075f, 0.11f, 0.055f, 0.085f,glm::vec3(0.24f,0.23f,0.20f), 0.35f);
         drawEnemyPart(rectangleShape_, x, y, -0.04f, -0.17f, 0.04f, 0.10f, darkCloth);
         drawEnemyPart(rectangleShape_, x, y, 0.04f, -0.17f, 0.04f, 0.10f, darkCloth);
-        drawEnemyPart(rectangleShape_, x, y, -0.12f, -0.015f, 0.14f, 0.04f,
-                      glm::vec3(0.62f,0.61f,0.56f), hardWeaponRotation);
-        drawEnemyPart(rectangleShape_, x, y, -0.055f, -0.005f, 0.04f, 0.055f,
-                      glm::vec3(0.34f,0.20f,0.11f), hardWeaponRotation);
+        drawEnemyPart(rectangleShape_, x, y, -0.12f, -0.015f, 0.14f, 0.04f, glm::vec3(0.62f,0.61f,0.56f), hardWeaponRotation);
+        drawEnemyPart(rectangleShape_, x, y, -0.055f, -0.005f, 0.04f, 0.055f, glm::vec3(0.34f,0.20f,0.11f), hardWeaponRotation);
         break;
     }
     currentDamageTint_ = 0.0f;
 }
 
-void Renderer::drawPlayerPart(const Shape& shape, float x, float y, float offsetX,
-                              float offsetY, float sx, float sy, glm::vec3 color,
-                              float rotation, float jumpOffset, bool ducking) {
-    const float heightScale = ducking ? 0.65f : 1.0f;
-    const float poseOffset = jumpOffset - (ducking ? 0.025f : 0.0f);
-    drawShape(shape, x + offsetX * playerDrawingScale_,
-              y + (poseOffset + offsetY * heightScale) * playerDrawingScale_,
-              sx * playerDrawingScale_, sy * heightScale * playerDrawingScale_,
-              color, rotation);
+void Renderer::drawPlayerPart(const Shape& shape, float x, float y, float offsetX,float offsetY, float sx, float sy, glm::vec3 color,float rotation, float jumpOffset, bool ducking) {
+    float heightScale = 1.0f;
+    float poseOffset = jumpOffset;
+    if (ducking) {
+        heightScale = 0.65f;
+        poseOffset -= 0.025f;
+    }
+    drawShape(shape, x + offsetX * playerDrawingScale_,y + (poseOffset + offsetY * heightScale) * playerDrawingScale_,sx * playerDrawingScale_, sy * heightScale * playerDrawingScale_,color, rotation);
 }
 
-void Renderer::drawPlayerCharacter(float x, float y, PlayerType playerType, int health,
-                                   float jumpOffset, bool ducking, bool attacking,
-                                   float scale, bool grayscale, float shieldRaise) {
+void Renderer::drawPlayerCharacter(float x, float y, PlayerType playerType, int health,float jumpOffset, bool ducking, bool attacking, float scale, bool grayscale, float shieldRaise) {
     const float previousScale = playerDrawingScale_;
     const bool previousGrayscale = grayscaleDrawing_;
     playerDrawingScale_ = scale;
     grayscaleDrawing_ = grayscale;
-    currentDamageTint_ = damageTintForHealth(health, playerType == PlayerType::Defense ? 7 : 5);
+    int maximumHealth = 5;
+    if (playerType == PlayerType::Defense) maximumHealth = 7;
+    currentDamageTint_ = damageTintForHealth(health, maximumHealth);
     const glm::vec3 skin(0.82f,0.60f,0.40f);
     const glm::vec3 darkCloth(0.22f,0.18f,0.15f);
-    const float swordRotation = attacking ? -0.95f : -0.35f;
+    float swordRotation = -0.35f;
+    if (attacking) swordRotation = -0.95f;
     switch (playerType) {
     case PlayerType::Melee:
         drawPlayerPart(rectangleShape_, x,y,0,-0.075f,0.075f,0.15f,glm::vec3(0.78f,0.68f,0.48f),0,jumpOffset,ducking);
@@ -309,7 +284,9 @@ void Renderer::drawPlayerCharacter(float x, float y, PlayerType playerType, int 
         drawPlayerPart(triangleShape_, x,y,0,0.09f,0.11f,0.10f,glm::vec3(0.31f,0.34f,0.24f),0,jumpOffset,ducking);
         drawPlayerPart(rectangleShape_, x,y,-0.022f,-0.17f,0.024f,0.10f,darkCloth,0,jumpOffset,ducking);
         drawPlayerPart(rectangleShape_, x,y,0.022f,-0.17f,0.024f,0.10f,darkCloth,0,jumpOffset,ducking);
-        drawPlayerPart(rectangleShape_, x,y,0.09f,-0.025f,0.025f,0.19f,glm::vec3(0.48f,0.28f,0.12f),attacking?0.15f:-0.15f,jumpOffset,ducking);
+        float rangedWeaponRotation = -0.15f;
+        if (attacking) rangedWeaponRotation = 0.15f;
+        drawPlayerPart(rectangleShape_, x,y,0.09f,-0.025f,0.025f,0.19f,glm::vec3(0.48f,0.28f,0.12f),rangedWeaponRotation,jumpOffset,ducking);
         drawPlayerPart(rectangleShape_, x,y,0.085f,-0.02f,0.105f,0.012f,glm::vec3(0.78f,0.70f,0.45f),0,jumpOffset,ducking);
         break;
     }
@@ -389,29 +366,27 @@ void Renderer::drawWorld(std::vector<Player>& players, const std::vector<Enemy>&
         if (!player.alive || player.lane < 0 || player.lane >= GameConfig::LANE_COUNT) continue;
         player.pos.y = GameConfig::LANE_Y[player.lane];
         const float jumpProgress = 1.0f - player.jumpTimer / GameConfig::JUMP_DURATION;
-        const float jumpOffset = player.jumpTimer > 0.0f
-            ? 0.20f * std::sin(jumpProgress * 3.14159265f) : 0.0f;
-        drawPlayerCharacter(player.pos.x, player.pos.y, player.type, player.health,
-                            jumpOffset, player.ducking, player.attackAnimationTimer > 0.0f,
-                            0.68f);
-        drawHealthBar(player.pos.x, player.pos.y + 0.135f + jumpOffset,
-                      player.health, player.maximumHealth(), glm::vec3(0.22f,0.76f,0.24f));
+        float jumpOffset = 0.0f;
+        if (player.jumpTimer > 0.0f) {
+            jumpOffset = 0.20f * std::sin(jumpProgress * 3.14159265f);
+        }
+        drawPlayerCharacter(player.pos.x, player.pos.y, player.type, player.health, jumpOffset, player.ducking, player.attackAnimationTimer > 0.0f, 0.68f);
+        drawHealthBar(player.pos.x, player.pos.y + 0.135f + jumpOffset, player.health, player.maximumHealth(), glm::vec3(0.22f,0.76f,0.24f));
     }
     if (!gameOver) {
         for (const Enemy& enemy : enemies) {
             if (!enemy.alive) continue;
             const float enemyY = GameConfig::LANE_Y[enemy.lane];
             drawEnemyCharacter(enemy.pos.x, enemyY, enemy);
-            drawHealthBar(enemy.pos.x, enemyY + 0.135f, enemy.health,
-                          enemy.maximumHealth(), glm::vec3(0.88f,0.18f,0.12f));
+            drawHealthBar(enemy.pos.x, enemyY + 0.135f, enemy.health, enemy.maximumHealth(), glm::vec3(0.88f,0.18f,0.12f));
         }
         for (const Projectile& projectile : enemyProjectiles) {
-            const glm::vec3 color = projectile.height == ProjectileHeight::Upper
-                ? glm::vec3(0.95f,0.35f,0.12f) : glm::vec3(0.95f,0.78f,0.20f);
+            glm::vec3 color(0.95f,0.78f,0.20f);
+            if (projectile.height == ProjectileHeight::Upper)
+                color = glm::vec3(0.95f,0.35f,0.12f);
             drawCircle(projectile.pos.x, projectile.pos.y, 0.035f, 0.035f, color);
         }
-        for (const Projectile& projectile : playerProjectiles)
-            drawShape(triangleShape_, projectile.pos.x, projectile.pos.y, 0.045f,0.025f,glm::vec3(0.95f,0.88f,0.44f));
+        for (const Projectile& projectile : playerProjectiles) drawShape(triangleShape_, projectile.pos.x, projectile.pos.y, 0.045f,0.025f,glm::vec3(0.95f,0.88f,0.44f));
     }
     for (const Collectible& collectible : collectibles) {
         if (!collectible.alive) continue;
@@ -420,25 +395,27 @@ void Renderer::drawWorld(std::vector<Player>& players, const std::vector<Enemy>&
     }
 }
 
-void Renderer::drawCutscene(const std::vector<Player>& heroes,
-                            const std::vector<Enemy>& enemies, float elapsed,
-                            bool heshamAttacking, bool fahmyAiming,
-                            float shikoShieldRaise, float bossWeaponRotation) {
+void Renderer::drawCutscene(const std::vector<Player>& heroes, const std::vector<Enemy>& enemies, float elapsed, bool heshamAttacking, bool fahmyAiming,float shikoShieldRaise, float bossWeaponRotation) {
     const bool noSelectedLanes[GameConfig::LANE_COUNT] = {false, false, false};
     glUseProgram(shaderProgram_);
     drawEnvironment(noSelectedLanes, -1);
 
     for (const Player& hero : heroes) {
-        const bool attacking = hero.type == PlayerType::Melee ? heshamAttacking
-            : (hero.type == PlayerType::LongRange && fahmyAiming);
-        const float shieldRaise = hero.type == PlayerType::Defense ? shikoShieldRaise : 0.0f;
-        drawPlayerCharacter(hero.pos.x, hero.pos.y, hero.type, hero.health,
-                            0.0f, false, attacking, 0.68f, false, shieldRaise);
+        bool attacking = false;
+        if (hero.type == PlayerType::Melee) {
+            attacking = heshamAttacking;
+        } else if (hero.type == PlayerType::LongRange) {
+            attacking = fahmyAiming;
+        }
+        float shieldRaise = 0.0f;
+        if (hero.type == PlayerType::Defense) shieldRaise = shikoShieldRaise;
+        drawPlayerCharacter(hero.pos.x, hero.pos.y, hero.type, hero.health, 0.0f, false, attacking, 0.68f, false, shieldRaise);
     }
 
     for (std::size_t i = 0; i < enemies.size(); ++i) {
         if (!enemies[i].alive) continue;
-        const float weaponRotation = i == 0 ? bossWeaponRotation : -0.25f;
+        float weaponRotation = -0.25f;
+        if (i == 0) weaponRotation = bossWeaponRotation;
         drawEnemyCharacter(enemies[i].pos.x, enemies[i].pos.y, enemies[i], weaponRotation);
     }
 
