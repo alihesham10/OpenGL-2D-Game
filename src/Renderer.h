@@ -65,9 +65,6 @@ private:
     float currentDamageTint_ = 0.0f;
     float playerDrawingScale_ = 1.0f;
     bool grayscaleDrawing_ = false;
-    float sceneScale_ = 1.0f;
-    float sceneOffsetX_ = 0.0f;
-    float sceneOffsetY_ = 0.0f;
     GLuint vao_ = 0, vbo_ = 0;
     Shape rectangleShape_, triangleShape_, circleShape_;
 };

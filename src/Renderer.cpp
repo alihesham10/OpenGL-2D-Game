@@ -151,10 +151,6 @@ void Renderer::drawShape(const Shape& shape, float x, float y, float sx, float s
         float gray = 0.299f * color.r + 0.587f * color.g + 0.114f * color.b;
         color = glm::vec3(gray);
     }
-    x = (x + sceneOffsetX_) * sceneScale_;
-    y = (y + sceneOffsetY_) * sceneScale_;
-    sx *= sceneScale_;
-    sy *= sceneScale_;
     glm::mat4 model(1.0f);
     model = glm::translate(model, glm::vec3(x, y, 0.0f));
     model = glm::rotate(model, rotation, glm::vec3(0, 0, 1));
@@ -429,9 +425,6 @@ void Renderer::drawCutscene(const std::vector<Player>& heroes,
                             bool heshamAttacking, bool fahmyAiming,
                             float shikoShieldRaise, float bossWeaponRotation) {
     const bool noSelectedLanes[GameConfig::LANE_COUNT] = {false, false, false};
-    sceneScale_ = 1.0f + 0.018f * std::clamp(elapsed / 10.0f, 0.0f, 1.0f);
-    sceneOffsetX_ = -0.025f * std::clamp(elapsed / 10.0f, 0.0f, 1.0f);
-    sceneOffsetY_ = 0.0f;
     glUseProgram(shaderProgram_);
     drawEnvironment(noSelectedLanes, -1);
 
@@ -456,7 +449,4 @@ void Renderer::drawCutscene(const std::vector<Player>& heroes,
         }
     }
 
-    sceneScale_ = 1.0f;
-    sceneOffsetX_ = 0.0f;
-    sceneOffsetY_ = 0.0f;
 }
