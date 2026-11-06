@@ -362,6 +362,26 @@ void Game::updateCombat(float deltaTime) {
             player.engagedEnemy = -1;
             player.attackCooldown = 0.0f;
         }
+        if (player.type != PlayerType::Defense && player.engagedEnemy < 0) {
+            const float playerStep = 2.0f * player.speedPixelsPerSecond /
+                GameConfig::WINDOW_W * deltaTime;
+            for (int i = 0; i < static_cast<int>(enemies_.size()); ++i) {
+                Enemy& enemy = enemies_[i];
+                if (!enemy.alive || enemy.engaged || enemy.lane != player.lane ||
+                    enemy.type != EnemyType::HardMelee || enemy.pos.x < player.pos.x) continue;
+
+                const float distance = contactDistance(player, enemy);
+                const float enemyNextX = enemy.pos.x - 2.0f * enemy.speedPixelsPerSecond /
+                    GameConfig::WINDOW_W * deltaTime;
+                if (player.pos.x + playerStep + distance < enemyNextX) continue;
+
+                player.pos.x = enemy.pos.x - distance;
+                player.engagedEnemy = i;
+                player.attackCooldown = 0.0f;
+                enemy.engaged = true;
+                break;
+            }
+        }
         player.move(deltaTime);
     }
 
