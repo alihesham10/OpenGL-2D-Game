@@ -1,11 +1,8 @@
 #include "Collectible.h"
-
 #include "Player.h"
-
 #include <cmath>
 
-Collectible::Collectible(glm::vec2 position, int collectibleLane, int coinValue)
-    : pos(position), lane(collectibleLane), value(coinValue), alive(true) {}
+Collectible::Collectible(glm::vec2 position, int collectibleLane, int coinValue) : pos(position), lane(collectibleLane), value(coinValue), alive(true) {}
 
 bool Collectible::collectIfTouched(const Player& player) {
     if (!alive || !player.alive || player.lane != lane) return false;
