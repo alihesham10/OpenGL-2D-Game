@@ -53,7 +53,9 @@ The project is organized into modular components to separate gameplay logic, ren
 
 Developed collaboratively as part of a university Computer Science and Engineering project.
 
-See the GitHub contributors section for the development team.
+- Ali Hesham (https://github.com/alihesham10)
+- Ahmed Hesham(https://github.com/ahmedhesham06)
+
 
 ---
 
